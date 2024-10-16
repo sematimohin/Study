@@ -1,0 +1,189 @@
+********************************************************************************
+***                            Micro-Cap 10.2.0.0                            ***
+***                                                                          ***
+***                                                                          ***
+***                         AC Analysis of circuit6                          ***
+***                           08.10.2024 21:55:32                            ***
+********************************************************************************
+Limits
+======
+Frequency Range  Log 400,100
+Number of Points 1001
+Temperature      Linear 27
+Maximum Change % 5
+Noise Input      NONE
+Noise Output     2
+Run Options      Normal
+State Variables  Zero
+Operating Point  On
+
+
+*****************************************************
+***                Temperature=27                 ***
+*****************************************************
+
+Temperature=27 
+
+DC Operating Point Voltages
+===========================
+Node         Voltage  Node         Voltage  Node         Voltage 
+1             0.000   2             0.000   3             0.000  
+4             0.000   5             0.000   6             0.000  
+7             0.000   8             0.000   9             0.000  
+10            0.000   11            0.000   12            0.000  
+13            0.000   14            0.000   15            0.000  
+16            0.000   17            0.000   18            0.000  
+19            0.000   T1.1          0.000   T1.4          0.000  
+T2.1          0.000   T2.4          0.000   T3.1          0.000  
+T3.4          0.000   X12.1         0.000   X12.4         0.000  
+X13.1         0.000   X13.4         0.000   X14.1         0.000  
+X14.4         0.000   X15.1         0.000   X15.4         0.000  
+
+
+Operating Point for Devices of Type Resistor
+============================================
+Instance:             T1.R2         T1.R3         T2.R2         T2.R3         T3.R2
+V                    0.000         0.000         0.000         0.000         0.000 
+Power DC Terms:
+PD                   0.000         0.000         0.000         0.000         0.000 
+
+DC Pin Currents:
+Ir                   0.000         0.000         0.000         0.000         0.000 
+
+Device Variables:
+tc1                  0.000         0.000         0.000         0.000         0.000 
+tc2                  0.000         0.000         0.000         0.000         0.000 
+
+
+Instance:             T3.R3        X12.R2        X12.R3        X13.R2        X13.R3
+V                    0.000         0.000         0.000         0.000         0.000 
+Power DC Terms:
+PD                   0.000         0.000         0.000         0.000         0.000 
+
+DC Pin Currents:
+Ir                   0.000         0.000         0.000         0.000         0.000 
+
+Device Variables:
+tc1                  0.000         0.000         0.000         0.000         0.000 
+tc2                  0.000         0.000         0.000         0.000         0.000 
+
+
+Instance:            X14.R2        X14.R3        X15.R2        X15.R3
+V                    0.000         0.000         0.000         0.000 
+Power DC Terms:
+PD                   0.000         0.000         0.000         0.000 
+
+DC Pin Currents:
+Ir                   0.000         0.000         0.000         0.000 
+
+Device Variables:
+tc1                  0.000         0.000         0.000         0.000 
+tc2                  0.000         0.000         0.000         0.000 
+
+
+
+Operating Point for Devices of Type Transmission Line
+=====================================================
+Instance:             T1.T1         T2.T1         T3.T1        X12.T1        X13.T1
+Power DC Terms:
+PS                   0.000         0.000         0.000         0.000         0.000 
+
+DC Pin Currents:
+Input                0.000         0.000         0.000         0.000         0.000 
+Output               0.000         0.000         0.000         0.000         0.000 
+
+Device Variables:
+z0                  50.000        50.000        50.000        50.000        50.000 
+td                  10.000m       10.000m       10.000m      160.000m       80.000m
+f                    0.000         0.000         0.000         0.000         0.000 
+nl                   0.000         0.000         0.000         0.000         0.000 
+
+
+Instance:            X14.T1        X15.T1
+Power DC Terms:
+PS                   0.000         0.000 
+
+DC Pin Currents:
+Input                0.000         0.000 
+Output               0.000         0.000 
+
+Device Variables:
+z0                  50.000        50.000 
+td                 240.000m      320.000m
+f                    0.000         0.000 
+nl                   0.000         0.000 
+
+
+
+Operating Point for Devices of Type Pulse
+=========================================
+Instance:                V1
+Using model:        IMPULSE
+V                    0.000 
+Power DC Terms:
+PG                   0.000 
+
+DC Pin Currents:
+ISource              0.000 
+
+
+
+Operating Point for Devices of Type Dependent Source
+====================================================
+Instance:            T1.E1         T1.E3         T2.E1         T2.E3         T3.E1
+V                   0.000         0.000         0.000         0.000         0.000 
+Power DC Terms:
+PG                  0.000         0.000         0.000         0.000         0.000 
+
+DC Pin Currents:
+ISource             0.000         0.000         0.000         0.000         0.000 
+
+
+Instance:            T3.E3         A0.E1         A3.E1         A2.E1         A1.E1
+V                   0.000         0.000         0.000         0.000         0.000 
+Power DC Terms:
+PG                  0.000         0.000         0.000         0.000         0.000 
+
+DC Pin Currents:
+ISource             0.000         0.000         0.000         0.000         0.000 
+
+
+Instance:           X12.E1        X12.E3        X13.E1        X13.E3        X14.E1
+V                   0.000         0.000         0.000         0.000         0.000 
+Power DC Terms:
+PG                  0.000         0.000         0.000         0.000         0.000 
+
+DC Pin Currents:
+ISource             0.000         0.000         0.000         0.000         0.000 
+
+
+Instance:           X14.E3        X15.E1        X15.E3
+V                   0.000         0.000         0.000 
+Power DC Terms:
+PG                  0.000         0.000         0.000 
+
+DC Pin Currents:
+ISource             0.000         0.000         0.000 
+
+
+
+Operating Point for Devices of Type Function Source
+===================================================
+Instance:          SUM3.E1       SUM2.E1       SUM1.E1       SUM6.E1       SUM5.E1
+V                   0.000         0.000         0.000         0.000         0.000 
+Power DC Terms:
+PG                  0.000         0.000         0.000         0.000         0.000 
+
+DC Pin Currents:
+ISource             0.000         0.000         0.000         0.000         0.000 
+
+
+Instance:          SUM7.E1       SUM4.E1
+V                   0.000         0.000 
+Power DC Terms:
+PG                  0.000         0.000 
+
+DC Pin Currents:
+ISource             0.000         0.000 
+
+

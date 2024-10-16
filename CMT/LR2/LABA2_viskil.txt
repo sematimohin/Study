@@ -1,0 +1,120 @@
+LIST P=18F2520, F=INHX32
+#include <P18F2520.INC>
+
+;******************************************************************************
+;Configuration bits
+CONFIG OSC = LP
+
+;******************************************************************************
+;Variable definitions
+UDATA
+
+WREG_TEMP RES 1
+STATUS_TEMP RES 1
+BSR_TEMP RES 1
+DLIT RES 1
+
+;******************************************************************************
+;EEPROM data
+DATA_EEPROM CODE 0xF00000
+DE "Test Data",0,1,2,3,4,5
+
+;******************************************************************************
+;Reset vector
+RESET_VECTOR CODE 0x0000
+goto Main
+code
+
+;******************************************************************************
+;High priority interrupt vector
+HI_INT_VECTOR CODE 0x0008
+bra HighInt
+
+;******************************************************************************
+;Low priority interrupt vector
+LOW_INT_VECTOR CODE 0x0018
+bra LowInt
+
+;******************************************************************************
+;High priority interrupt routine
+HighInt:
+; *** high priority interrupt code goes here ***
+retfie FAST
+
+;******************************************************************************
+;Low priority interrupt routine
+LowInt:
+movff STATUS, STATUS_TEMP
+movff WREG, WREG_TEMP
+movff BSR, BSR_TEMP
+
+; *** low priority interrupt code goes here ***
+
+movff BSR_TEMP, BSR
+movff WREG_TEMP, WREG
+movff STATUS_TEMP, STATUS
+retfie
+
+;******************************************************************************
+;Start of main program
+Main:
+; *** main code goes here ***
+
+movlw .64
+movwf DLIT
+movlw 0x02
+movwf FSR0H
+movlw 0x00
+movwf FSR0L
+movlw .64  ; start_number
+
+M1:
+movwf INDF0
+decf WREG
+incf FSR0L
+decf DLIT, f
+bnz M1
+
+movlw .64
+movwf DLIT
+
+movlw .0
+M2:
+movwf INDF0
+incf WREG
+incf WREG
+incf WREG
+incf WREG  
+incf FSR0L
+decf DLIT, f
+bnz M2
+
+movlw .64
+movwf DLIT
+
+movlw .255
+M3:
+movwf INDF0
+decf WREG
+decf WREG
+incf FSR0L
+decf DLIT, f
+bnz M3
+
+movlw .64
+movwf DLIT
+
+movlw .128
+M4:
+movwf INDF0
+incf WREG
+incf FSR0L
+decf DLIT, f
+bnz M4
+
+movlw .64
+movwf DLIT
+movlw .0
+NOP
+
+END
