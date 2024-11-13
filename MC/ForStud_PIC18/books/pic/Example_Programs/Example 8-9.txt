@@ -1,0 +1,1062 @@
+// Example system program
+//
+
+#include <p18cxxx.h>
+#include <timers.h>
+#include <delays.h>
+#include <usart.h>
+#include <string.h>
+
+/* Set configuration bits
+ *  - set RC oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = IRCIO67
+#pragma config WDT = ON
+#pragma config WDTPS = 256		// once per second
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+// ********* DATA MEMORY VARIABLES ************
+
+#pragma udata queue		// big buffers (see text)
+char dataQueue[312];	// ID queue
+char cardBuffer[200];	// buffer for card number
+
+#pragma udata
+
+char inQueue[16];		//USART queues
+char outQueue[16];
+char inPi;
+char inPo;
+char outPi;
+char outPo;
+
+int dataQueuePtr;		
+char dataQueueBusy;
+
+char cardBufferPtr;
+char cardBufferTimeOut;
+int oneBits;
+
+short long time;		// time
+char day = 1;			// date
+char month = 0;		
+int year = 2225;
+
+char flag;			// data available flag
+char dataL;
+char dataH;
+
+char alpha;			// alpha numbers mode
+char dirty;			// dirty flag
+char idNumberCount;
+char idBuffer[10];
+
+char state;			// packet buffer
+char packetBuffer[10];
+char packetPtr;
+
+// *********** PROGRAM MEMRORY STATIC DATA ***************
+
+rom near char *mes1 = "Welcome--just swipe your card.";
+rom near char *mes2 = "Alpha A-I";
+rom near char *mes3 = "Numeric";
+rom near char *mes4 = "ID Number = ";
+rom near char *mes5 = "                                        ";
+rom near char *mes6 = "Alpha J-R";
+rom near char *mes7 = "Alpha S-Z";
+rom near char *mes8 = "ID Number is too short!  Reenter it.";
+
+rom near char *monthName[] = 
+{
+	"January ",
+	"Febrary ",
+	"March ",
+	"April ",
+	"May ",
+	"June ",
+	"July ",
+	"August ",
+	"September ",
+	"October ",
+	"November ",
+	"December "
+};
+
+rom near char lookupKey[] = 
+{
+	1, 4, 7, 10,			/ left column
+	2, 5, 8, 0,
+	3, 6, 9, 11,		
+	12, 13, 14, 15,		
+	16, 17, 18, 19		// right column
+};
+
+rom near int code128[] =	// code 128 A lookup table
+{
+	0b11011001100,		// space	0
+	0b11001101100,		// !		1
+	0b11001100110,		// "		2
+	0b10010011000,		// #		3
+	0b10010001100,		// $		4
+	0b10001001100,		// %		5
+	0b10011001000,		// &		6
+	0b10011000100,		// '		7
+	0b10001100100,		// (		8
+	0b11001001000,		// )		9
+	0b11001000100,		// *		10
+	0b11000100100,		// +		11
+	0b10110011100,		// ,		12
+	0b10011011100,		// -		13
+	0b10011001110,		// .		14
+	0b10111001100,		// /		15
+	0b10011101100,		// 0		16
+	0b10011100110,		// 1		17
+	0b11001110010,		// 2		18
+	0b11001011100,		// 3		19
+	0b11001001110,		// 4		20
+	0b11011100100,		// 5		21
+	0b11001110100,		// 6		22
+	0b11101101110,		// 7		23
+	0b11101001100,		// 8		24
+	0b11100101100,		// 9		25
+	0b11100100110,		// :		26
+	0b11101100100,		// ;		27
+	0b11100110100,		// <		28
+	0b11100110010,		// =		29
+	0b11011011000,		// >		30
+	0b11011000110,		// ?		31
+	0b11000110110,		// @		32
+	0b10100011000,		// A		33
+	0b10001011000,		// B		34
+	0b10001000110,		// C		35
+	0b10110001000,		// D		36
+	0b10001101000,		// E		37
+	0b10001100010,		// F		38
+	0b11010001000,		// G		39
+	0b11000101000,		// H		40
+	0b11000100010,		// I		41
+	0b10110111000,		// J		42
+	0b10110001110,		// K		43
+	0b10001101110,		// L		44
+	0b10111011000,		// M		45
+	0b10111000110,		// N		46
+	0b10001110110,		// O		47
+	0b11101110110,		// P		48
+	0b11010001110,		// Q		49
+	0b11000101110,		// R		50
+	0b11011101000,		// S		51
+	0b11011100010,		// T		52
+	0b11011101110,		// U		53
+	0b11101011000,		// V		54
+	0b11101000110,		// W		55
+	0b11100010110,		// X		56
+	0b11101101000,		// Y		57
+	0b11101100010,		// Z		58
+	0b11100011010,		// [		59
+	0b11101111010,		// \		60
+	0b11001000010,		// ]		61
+	0b11110001010,		// ^		62
+	0b10100110000,		// _		63
+	0b10100001100,		// nul		64
+	0b10010110000,		// soh		65
+	0b10010000110,		// stx		66
+	0b10000101100,		// etx		67
+	0b10000100110,		// eot		68
+	0b10110010000,		// enq		69
+	0b10110000100,		// ack		70
+	0b10011010000,		// bel		71
+	0b10011000010,		// bs		72
+	0b10000110110,		// ht		73
+	0b10000110010,		// lf		74
+	0b11000010010,		// vt		75
+	0b11001010000,		// ff		76
+	0b11110111010,		// cr		77
+	0b11000010100,		// so		78
+	0b10001111010,		// si		79
+	0b10100111100,		// dle		80
+	0b10010111100,		// dc1		81
+	0b10010011110,		// dc2		82
+	0b10111100100,		// dc3		83
+	0b10011110100,		// dc4		84
+	0b10011110010,		// nak		85
+	0b11110100100,		// syn		86
+	0b11110010100,		// etb		87
+	0b11110010010,		// can		88
+	0b11011011110,		// em		89
+	0b11011110110,		// sub		90
+	0b11110110110,		// esc		91
+	0b10101111000,		// fs		92
+	0b10100011110,		// gs		93
+	0b10001011110,		// rs		94
+	0b10111101000,		// us		95
+	0b10111100010,		// fnc3		96
+	0b11110101000,		// fnc2		97
+	0b11110100010,		// shift	98
+	0b10111011110, 		// switch C	99
+	0b10111101110,		// switch B	100
+	0b11101011110,		// fnc4		101
+	0b11110101110,		// fnc1		102
+	0b11010111100,		// start A	103
+	0b11010010000,		// start B	104
+	0b11010011100,		// start C	105
+	0b1100011101011		// stop		106
+};
+
+// ******** DATA EEPROM DATA ADDRESS ASSIGNMENTS ********
+
+#define timeMode 0		// 0 = 12 hr; 1 = 24 hr
+#define unitAddressL 1
+#define unitAddressH 2
+#define passWord0 3
+#define passWord1 4
+#define passWord2 5
+#define passWord3 6
+#define passWord4 7
+#define idLength 8
+
+// ********* INTERRUPT DEFINITIONS ************
+
+// ********* PROTOTYPES ***********
+
+void MyHighInt(void);		// prototypes for the interrupt
+void MyLowInt(void);		// service procedures
+void timeTemp(void);
+int getTemp(void);
+void DoClock(void);			
+int GetInQueue(void);
+int SaveInQueue(char data);
+int GetOutQueue(void);
+int SaveOutQueue(char data);
+void abortCard(void);
+
+// ********** SETUP INTERRUPT VECTORS ****************
+// *** Special note for PIC18F2580
+// *** 	requires the High Priority interrupt to be 
+// ***	defined as interrupt low ( see errata for this 
+// ***	microcontroller).
+
+#pragma interruptlow MyHighInt						
+#pragma code high_vector=0x08	// high_vector is at 0x0008
+
+void high_vector(void)		// the high prioity vector
+{
+	_asm GOTO MyHighInt _endasm	// goto high software
+}
+
+#pragma interruptlow MyLowInt	// MyLowInt is an interrupt
+#pragma code low_vector=0x18	// low vector is at 0x0018
+
+void low_vector(void)		// the low prioity vector
+{
+	_asm GOTO MyLowInt _endasm		// goto low software
+}
+
+#pragma code				// start code here
+
+// High priority interrupt service procedure
+//	-- Interrupt on Change for ID card Slot Reader
+
+void MyHighInt(void)
+{	
+	if ( INTCONbits.RBIF == 1 )
+	{
+		int temp = PORTB;		// must read PORTB to clear change
+		INTCONbits.RBIF = 0;	// clear interrupt
+		if ( ReadTimer0() == 0 ) // initial
+		{
+			OpenTimer0(TIMER_INT_OFF &
+					T0_16BIT &
+					T0_SOURCE_INT &
+					T0_PS_1_256 );		// 128 us period
+			cardBufferPtr = 0;
+			cardBufferTimeOut = 10;
+		}
+		else
+		{
+			cardBuffer[cardBufferPtr++] = ReadTimer0();
+			cardBuffer[cardBufferPtr++] = ReadTimer0() >> 8 ;
+			cardBuffer[cardBufferPtr] = PORTBbits.RB7;
+			cardBuffer[cardBufferPtr++ ^= 0x01;	// invert bit
+			if ( cardBufferPtr >= ( idLength + 3 ) * 6 )
+				abortCard(); 
+		}
+	}	
+}
+
+// Low priority interrupt service procedure
+// 	-- USART receiver (highest)
+//  -- USART transmitter 
+//  -- Timer 1 (RTC) (lowest)
+
+void MyLowInt(void)
+{
+	int temp;
+	if ( PIR1bits.RCIF == 1 )	// is it USART receiver?
+	{
+		PIR1bits.RCIF = 0;		// clear interrupt
+		SaveInQueue( RCREG );	// store received data in queue
+	}
+	else if ( PIR1bits.TXIF == 1 )	// is it USART transmitter
+	{
+		PIR1bits.TXIF = 0;		// clear interrupt
+		temp = GetOutQueue();	// get queue data
+		if ( temp == 0x100 )
+			TXSTAbits.TXEN = 0;	// transmitter off
+		else
+			TXREG = temp;		// send data
+	}
+	else if ( PIR1bits.TMR1IF == 1 )	// is it 100 ms RTC?
+	{
+		if ( cardBufferTimeOut == 0 && ReadTimer0() != 0 )
+			abortCard();	// if timed out
+		else if ( cardBufferTimeOut != 0 )
+			cardBufferTimeOut--;
+		DoClock();			// crank the clock
+	}	
+}
+
+// ************** FUNCTIONS ***************
+
+// Card slot reader time out 
+
+void abortCard(void)
+{
+	CloseTimer0();
+	cardBufferTimeOut = 0;
+	WriteTimer0( 0 );
+	if ( cardBufferPtr >= ( idLength + 3 ) + 6 )
+		flag = 1;	
+}
+
+// Reads a data EEPROM location from address
+
+char eeRead(char address)
+{
+	EECON1bits.EEPGD = 0;
+	EEADR = address;
+	EECON1bits.RD = 1;
+	return EEDATA;
+}
+
+// Write a data EEPROM location at address with data
+
+void eeWrite(char address, char data)
+{
+	INTCONbits.GIEH = 0;	
+	INTCONbits.GIEL = 0;	
+	EECON1bits.EEPGD = 0;	
+	EECON1bits.WREN = 1;
+	EEADR = address;
+	EEDATA = data;
+	EECON2 = 0x55;
+	EECON2 = 0xAA;
+	EECON1bits.WR = 1;
+	while ( PIR2bits.EEIF == 0 );
+	PIR2bits.EEIF = 0;	
+	EECON1bits.WREN = 0;
+	INTCONbits.GIEH = 1;	
+	INTCONbits.GIEL = 1;	
+}
+
+// Read from InQueue, 0x100 is empty
+
+int GetInQueue(void)
+{
+	int temp;
+	if ( inPi == inPo )
+		return 0x100;		// if empty
+	temp = inQueue[inPo];	// get data
+	inPo = ( inPo + 1 ) & 0x0F;
+	return temp;
+}
+
+// Save data in InQueue, 0x100 is full
+
+int SaveInQueue(char data)
+{
+	if ( inPi == ( ( inPo + 1 ) & 0x0F ) )
+		return 0x100;		// if full
+	inQueue[inPi] = data;
+	inPi = ( inPi + 1 ) & 0x0F;
+	return 0;
+}
+
+// Read from OutQueue, 0x100 is empty
+
+int GetOutQueue(void)
+{
+	int temp;
+	if ( outPi == outPo )
+		return 0x100;		// if empty
+	temp = outQueue[outPo];	// get data
+	outPo = ( outPo + 1 ) & 0x0F;
+	return temp;
+}
+
+// Save data in OutQueue, 0x100 is full
+
+int SaveOutQueue(char data)
+{
+	if ( outPi == ( ( outPo + 1 ) & 0x0F ) )
+		return 0x100;		// if full
+	inQueue[outPi] = data;
+	outPi = ( outPi + 1 ) & 0x0F;
+	PIE1bits.TXIE = 1;		// transmitter on
+	return 0;
+}
+
+// Send LCD byte data, with RS = rs
+
+void SendLCDdata( char data, char rs )
+{
+	PORTA = data >> 4;		// send left nibble
+	PORTAbits.RA5 = rs;		// set RS
+	PORTAbits.RA4 = 1;		// pulse E
+	PORTAbits.RA4 = 0; 
+	Delay10TCYx(8);			// wait 40 us
+	PORTA = data & 0x0F;	// send right nibble
+	PORTAbits.RA5 = rs;		// set RS
+	PORTAbits.RA4 = 1;		// pulse E
+	PORTAbits.RA4 = 0; 	
+	Delay10TCYx(8);			// wait 40 us
+}
+
+// Initialize LCD
+
+void InitLCD(void)			// intialize LCD
+{
+	Delay1KTCYx(40); 		// wait 20 ms 
+	SendLCDdata(0x30, 0);	// send 0x30
+	Delay1KTCYx(12);		// wait 6 ms
+	SendLCDdata(0x30, 0);	// send 0x30
+	Delay10TCYx(20);		// wait 100 us
+	SendLCDdata(0x30, 0);	// send 0x30
+	SendLCDdata(0x30, 0);	// send 0x30
+	SendLCDdata(0x08, 0);	// send 0x08
+	SendLCDdata(0x01, 0);	// send 0x01
+	Delay1KTCYx(4);			// wait 2 ms 
+	SendLCDdata(0x0C, 0);	// send 0x0C
+	SendLCDdata(0x06, 0);	// send 0x06
+}
+
+// Display a data RAM based string (str) at position
+// 	Line 1 is at positions 0x80 through 0xA7
+//	Line 2 is ay positions 0xC0 through 0xE7
+
+void DisplayStringRam( char position, char *str )
+{
+	char ptr = 0;
+	SendLCDdata(position, 0);	// send position
+	while ( str[ptr] != 0 )
+		SendLCDdata(str[ptr++], 1);	// send character
+}
+
+// Display a program memory based string (str) at position
+
+void DisplayStringPgm( char position, rom char *str )
+{
+	char ptr = 0;
+	SendLCDdata(position, 0);	// send position
+	while ( str[ptr] != 0 )
+		SendLCDdata(str[ptr++], 1);	// send character
+}
+
+// Display time and date at right of Line 2
+
+void DisplayTimeDate(void)	//	once per second
+{
+	char timedatestring[19];
+	int a;
+	char Mode;
+	char ptr = 0;
+	int hours = time / 36000;	// get hours
+	char amPM = 'A';	
+	int minutes = ( time % 36000 ) / 600;	// get minutes
+	int seconds = (( time % 36000 ) % 600) / 10;	// get seconds
+	int year1 = year;
+
+	Mode = eeRead( timeMode );	// get timeMode from EEPROM
+
+//	display time
+
+	if ( Mode == 1 )		// 12 hour mode
+	{
+		if ( hours >= 12 )
+		{
+			hours -= 12;
+			amPM = 'P';		
+		}
+
+		if ( hours == 0 )
+			hours = 12;
+	}
+
+	if ( ( hours / 10 ) == 0 )
+		timedatestring[ptr++] = ' ';
+	else
+		timedatestring[ptr++] = hours / 10 + 0x30;
+	timedatestring[ptr++] = hours % 10 + 0x30;
+	timedatestring[ptr++] = ':';
+	timedatestring[ptr++] = minutes / 10 + 0x30;
+	timedatestring[ptr++] = minutes % 10 + 0x30;	
+	timedatestring[ptr++] = ':';
+	timedatestring[ptr++] = seconds / 10 + 0x30;
+	timedatestring[ptr++] = seconds % 10 + 0x30;
+	
+	if ( Mode == 1 )
+	{
+		timedatestring[ptr++] = ' ';
+		timedatestring[ptr++] = amPM;
+		timedatestring[ptr++] = 'M';
+	}
+	timedatestring[ptr] = 0;
+	DisplayStringRam( 0xe0, timedatestring );
+
+// display date
+
+	ptr = strlenpgm( monthName[month] );
+	strcpypgm2ram( timedatestring, monthName[month] );
+	if ( day / 10 == 0 )
+		timedatestring[ptr] = ' ';
+	else
+		timedatestring[ptr++] = day / 10 + 0x30;
+	timedatestring[ptr++] = day % 10 + 0x30;
+	timedatestring[ptr++] = ',';
+	timedatestring[ptr++] = ' ';
+	for ( a = 1000; a > 0; a /= 10 )
+	{
+		timedatestring[ptr++] = year1 / a + 0x30;
+		year1 -= year1 / a * a;
+ 	}
+	timedatestring[ptr] = 0;
+	DisplayStringRam( 0xcc, timedatestring );
+}
+
+// Increment the RTC clock
+//	does not incrment date 
+
+void DoClock(void)			// timer 1 interrupt handler
+{
+	PIR1bits.TMR1IF = 0;	// clear Timer 1 request
+	WriteTimer1( -25000 );	// reload count
+	time++;					// increment time
+	if ( time == 864000 )	// if new day (864000~1/10 sec)
+		time = 0;			// to 0:00:00:0
+	if ( ( time % 10 ) == 0) 
+		DisplayTimeDate();	
+}
+
+// Read a key from the keypad
+
+unsigned char GetKey(void)
+{
+	int a;
+	unsigned char keyCode;
+	PORTC = 0x00;	// select all key columns
+	do		// wait for release 
+	{
+		while ( ( PORTB & 0x0F ) != 0x0F )
+			ClrWdt();	// wag Spot's tail
+		Delay1KTCYx(30);
+
+	}while( ( PORTB & 0x0F ) != 0x0F );
+	do		// wait for press 
+	{
+		while ( ( PORTB & 0x0F ) == 0x0F )
+			ClrWdt();	// wag tail
+		Delay1KTCYx(30);
+
+	}while( ( PORTB & 0x0F ) == 0x0F );
+	PORTC = 0xFE;				// select a leftmost column
+	while ( ( PORTB & 0x0F ) == 0x0F )  // while no key is found
+	{
+		PORTC = (PORTC << 1) | 1;	// get next column 
+		keyCode += 4;				// add 4 to keycode
+	}
+	for ( a = 1; a != 0; a <<= 1)
+	{								// find row
+		if ( ( PORTB & a ) == 0 )
+			break;
+		keyCode++;
+	}
+	return lookupKey[keyCode];		// lookup correct key code
+}
+
+char GetCode(int ptr)
+{
+	int a;
+	int currentTime;
+	int temp = 0;
+	int oneHalfBits = oneBits / 2;
+	int oneAndOneHalfBits = oneBits + oneBits / 2;
+	for ( a = 0; a < 6; a++ ) 
+	{
+		currentTime = cardBuffer[ptr] + cardBuffer[ptr + 1] << 8;
+		if ( currentTime > oneHalfBits && 
+			 currentTime < oneAndOneHalfBits )
+		{
+			temp <<= 1;
+			if ( cardBuffer[ptr+2] == 1 )
+				temp |= 1;
+		}	
+		else if ( currentTime > oneAndOneHalfBits &&
+			      currentTime < ( oneAndOneHalfBits + oneBits ) )
+		{
+			temp <<= 2;
+			if ( cardBuffer[ptr+2] == 1 )
+				temp |= 3;
+		}
+		else if ( currentTime > ( oneAndOneHalfBits + oneBits ) &&
+				  currentTime < ( oneAndOneHalfBits + oneBits * 2 ) )
+		{
+			temp <<= 3;
+			if ( cardBuffer[ptr+2] == 1 )
+				temp |= 7;
+		}
+		else if ( currentTime > ( oneAndOneHalfBits + oneBits * 2 ) &&
+				  currentTime < ( oneAndOneHalfBits + oneBits * 3 ) )
+		{
+			temp <<= 4;
+			if ( cardBuffer[ptr+2] == 1 )
+				temp |= 0x0F;
+		}
+		ptr += 3;
+	}
+	for ( a = 0; a < 107; a++ )
+		if ( code128[a] == temp )
+			break;
+	return a;
+}
+
+char GetCodeB(int ptr)
+{
+	int a;
+	int currentTime;
+	int temp = 0;
+	int oneHalfBits = oneBits / 2;
+	int oneAndOneHalfBits = oneBits + oneBits / 2;
+	for ( a = 0; a < 6; a++ ) 
+	{
+		currentTime = cardBuffer[ptr] + cardBuffer[ptr + 1] << 8;
+		if ( currentTime > oneHalfBits && 
+			 currentTime < oneAndOneHalfBits )
+		{
+			temp >>= 1;
+			if ( cardBuffer[ptr+2] == 1 )
+				temp |= 0x8000;
+		}	
+		else if ( currentTime > oneAndOneHalfBits &&
+			      currentTime < ( oneAndOneHalfBits + oneBits ) )
+		{
+			temp >>= 2;
+			if ( cardBuffer[ptr+2] == 1 )
+				temp |= 0xC000;
+		}
+		else if ( currentTime > ( oneAndOneHalfBits + oneBits ) &&
+				  currentTime < ( oneAndOneHalfBits + oneBits * 2 ) )
+		{
+			temp >>= 3;
+			if ( cardBuffer[ptr+2] == 1 )
+				temp |= 0xE000;
+		}
+		else if ( currentTime > ( oneAndOneHalfBits + oneBits * 2 ) &&
+				  currentTime < ( oneAndOneHalfBits + oneBits * 3 ) )
+		{
+			temp >>= 4;
+			if ( cardBuffer[ptr+2] == 1 )
+				temp |= 0xF000;
+		}
+		ptr += 3;
+	}
+	temp >>= 5;
+	for ( a = 0; a < 107; a++ )
+		if ( code128[a] == temp )
+			break;
+	return a;
+}
+void ProcessCard(void)
+{
+	int ptr = 0;
+	char check;
+	char temp;
+	int mod103 = 0;
+	char count = 0;
+	char buffer[10];
+	oneBits = cardBuffer[4] << 8 + cardBuffer[3];
+	flag = 0;
+	if ( cardBuffer[2] == 0 && cardBuffer[5] == 1 )
+	{		// could be good start
+		temp = GetCode(ptr);
+		if ( temp == 103 )	// if forward code
+		{ 
+			while ( count != eeRead(idLength) )
+			{
+				ptr += 18;
+				buffer[count] = GetCode(ptr);
+				mod103 = buffer[count] * ( count + 1 );
+				buffer[count] += 32;
+				count++;
+			}
+			ptr += 18;
+			if ( ( mod103 % 103 ) == GetCode(ptr) )	// good check
+			{
+				for ( ptr = 0; ptr < eeRead(idLength); ptr++ )
+				{
+					dataQueue[dataQueuePtr++] = buffer[ptr];
+					dataQueue[dataQueuePtr++] = time / 36000;
+					dataQueue[dataQueuePtr++] = ( time % 36000 ) / 									   600;
+				}
+			}
+		}
+		else if ( temp == 107 ) 	// of backward code
+		{
+			ptr += 3;	// skip rest of STOP code
+			check = GetCodeB(ptr);	
+			while ( count != eeRead(idLength) )
+			{
+				ptr += 18;
+				buffer[count] = GetCodeB(ptr);
+				mod103 = buffer[count] * ( count + 1 );
+				buffer[count] += 32;
+				count++;
+			}
+			ptr += 18;
+			if ( ( mod103 % 103 ) == check )	// good check
+			{
+				for ( ptr = 0; ptr < eeRead(idLength); ptr++ )
+				{
+					dataQueue[dataQueuePtr++] = buffer[ptr];
+					dataQueue[dataQueuePtr++] = time / 36000;
+					dataQueue[dataQueuePtr++] = ( time % 36000 ) / 600;
+				}
+			}
+		}
+	}
+}
+
+void ProcessNetData(char data)
+{
+	int a, checksum, tempPtr;
+	if ( state == 0 )		// process all commands
+	{
+		packetPtr = 0;
+		if ( data == 0x17 )
+			state = 1;
+		else if ( data == 0x1A )
+			state = 2;
+		else if ( data == 0x18 )
+			state = 3;
+		else if ( data == 0x1b )
+			state = 4;
+	}
+	else if ( state == 1 )	// process commonad 0x17 (set time & data)
+	{
+		packetBuffer[packetPtr++] = data;
+		if ( packetPtr == 8 )
+		{
+			checksum = 0;
+			for ( a = 0; a < 8; a++ )
+				checksum ^= packetBuffer[a];
+			if ( checksum == 0 )		// good crc
+			{
+				time = packetBuffer[0] * 36000 + packetBuffer[1] * 						600 + packetBuffer[2] * 10;
+				day = packetBuffer[3];
+				month = packetBuffer[4];
+				year = packetBuffer[5] * 100 + packetBuffer[6];
+			}
+			state = 0;		// look for next command
+		}		
+	}
+	else if ( state == 2 )	// process change ID address
+	{
+		packetBuffer[packetPtr++] = data;
+		if ( packetPtr == 5 )
+		{
+			checksum = 0;
+			for ( a = 0; a < 8; a++ )
+				checksum ^= packetBuffer[a];
+			if ( checksum == 0 )		// good crc
+			{
+				if ( eeRead( unitAddressL ) == packetBuffer[0] &&
+					 eeRead( unitAddressH ) == packetBuffer[1] )
+				{
+					eeWrite( unitAddressL, packetBuffer[2] );
+					eeWrite( unitAddressH, packetBuffer[3] );
+				}
+			}
+			state = 0;
+		}
+	}
+	else if ( state == 3 )  // process read request
+	{
+		packetBuffer[packetPtr++] = data;
+		if ( packetPtr == 3 )
+		{
+			checksum = 0;
+			for ( a = 0; a < 8; a++ )
+				checksum ^= packetBuffer[a];
+			if ( checksum == 0 )		// good crc
+			{
+				PORTAbits.RA6 = 1;		// set transmit
+				if ( eeRead( unitAddressL ) == packetBuffer[0] &&
+					 eeRead( unitAddressH ) == packetBuffer[1] )	
+				{
+					while ( SaveOutQueue(0x06) == 0x100 )	// 																							send ACK
+						ClrWdt();
+					while( TXSTAbits.TRMT == 0 );	// wait for 										completetion
+					if ( dataQueuePtr != 0 )
+					{
+						checksum = 0;
+						tempPtr = 0;
+						while ( tempPtr != dataQueuePtr )
+						{
+							checksum ^= dataQueue[tempPtr];
+							while ( SaveOutQueue( 									dataQueue[tempPtr] ) == 0x100 )
+								ClrWdt();
+							tempPtr++;
+						}
+						while ( SaveOutQueue(0xFF) == 0x100 )								//send EOM
+							ClrWdt();
+						while ( SaveOutQueue(checksum) == 0x100 							)  //send checksum
+							ClrWdt();
+						dataQueuePtr = 0;
+					}
+				}
+					SaveOutQueue(0X21); // send NAK
+				PORTAbits.RA6 = 0;		//set receive
+				state = 0;				
+			}
+		}
+	}
+	else if ( state == 4 )
+	{
+		packetBuffer[packetPtr++] = data;
+		if ( packetPtr == 1 )
+		{
+			eeWrite( idLength, packetBuffer[0] );
+			state = 1; 
+		}
+	}
+}
+
+void SaveBigQueue(char data)
+{
+	if ( data == 0xFE )
+		dataQueueBusy = 1;
+	else if ( data == 0xFF )
+	{
+		dataQueue[dataQueuePtr++] = time / 36000;
+		dataQueue[dataQueuePtr++] = ( time % 36000 ) / 600;
+		dataQueueBusy = 0;
+	}
+	else
+		dataQueue[dataQueuePtr++] = data;
+}	
+
+void ProcessKey(void)
+{
+	int a;
+	char temp = GetKey();
+	if ( temp == 0 && idNumberCount < eeRead( idLength ) && 
+		idNumberCount == 0 )
+	{
+		DisplayStringPgm( 0x84, mes4 );
+		idBuffer[idNumberCount] = temp;
+		SendLCDdata( 0x8C + idNumberCount++, 0 );
+		SendLCDdata( temp + 0x30, 1 );			
+	}
+	else if ( temp >= 1 && temp <= 9 && idNumberCount < eeRead( idLength ) )
+	{
+		if ( idNumberCount == 0 )
+			DisplayStringPgm( 0x84, mes4 );
+		if ( alpha == 0 )
+		{
+			idBuffer[idNumberCount] = temp;
+			SendLCDdata( 0x8C + idNumberCount++, 0 );
+			SendLCDdata( temp + 0x30, 1 );								
+		}
+		else
+		{
+			idBuffer[idNumberCount++] = alpha * 10 + temp;
+			SendLCDdata( 0x8C + idNumberCount++, 0 );
+			SendLCDdata( alpha * 10 + temp + 0x40, 1 );				
+		}
+	}
+	else if ( temp == 10 )	// alpha select up
+	{
+		if ( alpha != 0 && alpha != 3 )
+				alpha++;
+		if ( alpha == 1 )
+			DisplayStringPgm( 0xC0, mes2 );
+		else if ( alpha == 2 )
+			DisplayStringPgm( 0xC0, mes6 );
+		else if ( alpha == 3 )
+			DisplayStringPgm( 0xC0, mes7 );
+	}
+	else if ( temp == 11 )	// alpah select down
+	{
+		if ( alpha != 0 && alpha != 1 )
+			alpha--;
+		if ( alpha == 1 )
+			DisplayStringPgm( 0xC0, mes2 );
+		else if ( alpha == 2 )
+			DisplayStringPgm( 0xC0, mes6 );
+		else if ( alpha == 3 )
+			DisplayStringPgm( 0xC0, mes7 );
+	}
+	else if ( temp == 12 ) // F1 enter key
+	{
+		if ( idNumberCount - 1 == eeRead( idLength ) )
+		{
+			SaveBigQueue( 0xFE );
+			for ( a = 0; a < idNumberCount; a++ )
+			{
+				if ( idBuffer[a] >= 10 && idBuffer[a] <= 18)
+					idBuffer[a] += 0x31;
+				else if ( idBuffer[a] >= 19 && idBuffer[a] <= 27 )
+					idBuffer[a] += 0x27;
+				else if ( idBuffer[a] >= 28 )
+					idBuffer[a] += 0x37;
+				SaveBigQueue( idBuffer[a] );
+				SaveBigQueue( 0xFF );					
+			}
+			DisplayStringPgm( 0x84, mes1 );
+		}
+		else
+		{
+			DisplayStringPgm( 0x82, mes2 );
+			idNumberCount = 0;
+		}
+	}
+	else if ( temp == 13 ) // F5 backspace key
+	{
+		if ( idNumberCount != 0 )
+		{
+			SendLCDdata( 0x8C + idNumberCount--, 0 );
+			SendLCDdata( ' ' , 1 );
+		}
+	}
+	else if ( temp == 14 )
+	{
+
+	}
+	else if ( temp == 15 )	// F7 numeric select key
+	{
+		alpha = 0;
+		DisplayStringPgm( 0xC0, mes3 );
+	}
+	else if ( temp == 16 )	// F2 clear key
+	{
+		DisplayStringPgm( 0x84, mes1 );
+		idNumberCount = 0;
+	}
+	else if ( temp == 17 )
+	{
+
+	}
+	else if ( temp == 18 )
+	{
+
+	}
+	else if ( temp == 19 )	// F8 alpha select
+	{
+		alpha = 1;
+		DisplayStringPgm( 0xC0, mes2 );		
+	}
+}
+
+// ***************** MAIN PROGRAM *********************
+
+void main (void)
+{
+	int temp;
+
+// setup ports pins
+
+	OSCCON = 0x72;		// selects an 8MHz internal clock
+	ADCON1 = 0x7F;		// Ports are digital
+	TRISA = 0x00;			// Port A is output
+	PORTA = 0x00;			// Net is input to ID card reader
+	TRISB = 0xFF;			// Port B is input
+	TRISC = 0xA0;			// Port C is output except RC7
+	PORTC = 0x00;			// Slect all columns on the keyboard
+
+// check for default reset jumper
+
+	if( PORTCbits.RC5 == 0  )	// on hard intitialization
+	{					// reset defaults
+		eeWrite(timeMode, 1);	// set AM/PM mode
+		eeWrite(unitAddressL, 0);	// set unit address to 0x0000
+		eeWrite(unitAddressH, 0);	// address set to 0x0000
+		eeWrite(passWord0, 0);	// password set to 00411
+		eeWrite(passWord1, 0);
+		eeWrite(passWord2, 4);
+		eeWrite(passWord3, 1);
+		eeWrite(passWord4, 1);
+		eeWrite(idLength, 10);	// default ID length = 10
+	}
+
+// setup clock and clock interrupt 
+
+	time = 0;				// initial time to midnight
+	IPR1bits.TMR1IP = 0;		/ Timer 1 is low priority
+	WriteTimer1( -25000  );		/ every 100 ms
+	OpenTimer1( TIMER_INT_ON &
+			T1_16BIT_RW &
+			T1_SOURCE_INT &
+			T1_PS_1_8 );
+				
+// setup USART and caches
+
+	IPR1bits.TXBIP = 0;			// select low priority
+	IPR1bits.RCIP = 0;			// TXBIP is errata
+	inPo = inPi = outPo = outPi = 0;	// setup queues
+	state = 0;				// set USART state to 0
+	dataQueuePtr = dataQueueBusy = 0;
+	OpenUSART(USART_TX_INT_OFF &	//USART operates at 9600 Baud
+			USART_RX_INT_OFF &
+			USART_ASYNCH_MODE &
+			USART_EIGHT_BIT &
+			USART_SINGLE_RX &
+			USART_BRGH_HIGH,
+			51 );
+
+// setup interrrupt on change for optical card reader
+	
+	flag = alpha = 0;		// show no data
+	INTCON2bits.RBIP = 1;	// high priority
+	INTCONbits.RBIE = 1;	// enable bit change interrupt
+	WriteTimer0( 0 );		// initialize timer 0
+
+// start interrupt system
+
+	RCONbits.IPEN = 1;		// IPEN = 1 to enable priority interrupts
+	INTCONbits.GIEH = 1;	// enable high priority interrupt
+	INTCONbits.GIEL = 1;	// enable low priority interrupt
+
+// the one and only main system program
+
+	InitLCD();				// initialize LCD	
+	DisplayStringPgm( 0x84, mes1 );	//sign on message
+	DisplayStringPgm( 0xC0, mes3 );
+	DisplayTimeDate();		// initial date & time display
+
+	while ( 1 )			// main loop (this is it)
+	{
+		ClrWdt();		// pet spot
+		if ( ( PORTB & 0x0F ) != 0x0F )	// if any key
+			ProcessKey();
+		if ( flag != 0 )
+			ProcessCard();	// if card code
+		temp = GetInQueue();
+		if ( temp != 0x100 )	// if not empty
+		 	ProcessNetData(temp);	// process net data
+	}
+}

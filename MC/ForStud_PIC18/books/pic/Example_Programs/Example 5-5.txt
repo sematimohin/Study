@@ -1,0 +1,34 @@
+/*
+ * This is Example 5-5 for a 4 MHz clock
+ */
+
+#include <p18cxxx.h>   
+#include <delays.h>
+#include <stdlib.h>
+
+/* Set configuration bits
+ *  - set HS oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ */
+
+#pragma config OSC = HS
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+
+void main (void)
+{
+	ADCON1 = 0x7F;	// configure PORTS A and B as digital
+				// 	this might need to be changed depending 
+				// 	on the microcontroller version.
+
+    	TRISB = 0;          // configure PORTB for output 
+	PORTB = 0;		// LEDs off
+	srand(1);		// seed the random number
+
+	while ( 1 )		// repeat forever
+	{
+		Delay10KTCYx(50);	// wait 1/2 second
+		PORTB = rand();	// display a random number
+	}
+}

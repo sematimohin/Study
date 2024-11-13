@@ -1,0 +1,240 @@
+/*
+ * DCC accessory decoder example
+ */
+
+#include <p18cxxx.h>
+#include <timers.h>
+
+/* Set configuration bits
+ *  - set HS oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = HS
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+void MyHighInt(void);		// prototypes for the interrupt
+void MyLowInt(void);		// service procedures
+
+#pragma interrupt MyHighInt	// MyHighInt is an interrupt
+#pragma code high_vector=0x08	// high_vector is at 0x0008
+
+void high_vector(void)		// the high prioity vector
+{
+	_asm GOTO MyHighInt _endasm	// goto high software
+}
+
+#pragma interruptlow MyLowInt	// MyLowInt is an interrupt
+#pragma code low_vector=0x18	// low vector is at 0x0018
+
+void low_vector(void)		// the low prioity vector
+{
+	_asm GOTO MyLowInt _endasm		// goto low software
+}
+
+// data memory 
+
+char flag;				// data available flag
+char data;
+
+// ******** DATA EEPROM DATA ADDRESS ASSIGNMENTS ********
+
+#define CV513  0			// low address
+#define CV521  1			// high address
+
+#pragma code				// start code here
+
+// Reads a data EEPROM location from address
+
+char eeRead(char address)
+{
+	EECON1bits.EEPGD = 0;
+	EEADR = address;
+	EECON1bits.RD = 1;
+	return EEDATA;
+}
+
+// Write a data EEPROM location at address with data
+
+void eeWrite(char address, char data)
+{
+	INTCONbits.GIEH = 0;	
+	INTCONbits.GIEL = 0;	
+	EECON1bits.EEPGD = 0;	
+	EECON1bits.WREN = 1;
+	EEADR = address;
+	EEDATA = data;
+	EECON2 = 0x55;
+	EECON2 = 0xAA;
+	EECON1bits.WR = 1;
+	while ( PIR2bits.EEIF == 0 );
+	PIR2bits.EEIF = 0;	
+	EECON1bits.WREN = 0;
+	INTCONbits.GIEH = 1;	
+	INTCONbits.GIEL = 1;	
+}
+
+
+void MyHighInt(void)
+{	
+	if ( INTCONbits.RBIF == 1 )
+	{
+		int temp = PORTB;		// must read PORTB to clear change
+		INTCONbits.RBIF = 0;	// clear interrupt
+		if ( PORTBbits.RB7 == 0 )
+		{
+			if ( ReadTimer0() == 0 ) // initial
+			{
+				OpenTimer0(TIMER_INT_OFF &
+							T0_16BIT &
+							T0_SOURCE_INT &
+							T0_PS_1_256 );
+			}
+			else if ( ReadTimer0() < 4 * 52 )
+				WriteTimer0( 0 );	// invalid reset Timer 0
+			else if ( ReadTimer0() >= 4 * 52 &&
+					  ReadTimer0() <= 4 * 64 )
+			{
+				WriteTimer0( 0 );	// good 1 reset timer 0
+				data = 1;
+				flag = 1;
+			}
+			else if ( ReadTimer0() >= 4 * 90 &&
+					  ReadTimer0() <= 4 * 10000 )
+			{
+				WriteTimer0( 0 );	// good 0 reset timer 0
+				data = 0;
+				flag = 1;
+			}
+			else		// bad data
+				WriteTimer0( 0 );	// reset timer 0
+		}
+		else
+			WriteTimer0( 0 );		// reset on a one transition
+	}
+}
+
+void MyLowInt(void)
+{
+	// nothing in this example
+}
+
+char wait4Bit(void)
+{
+	while ( flag == 0 );	// wait for a bit
+	flag = 0;
+	return data;		
+}
+
+char getByte(void)			// receive a byte
+{
+	char temp = 0;
+	int a;
+	for ( a = 0; a < 8; a++ )
+	{
+		temp <<= 1;
+		temp |= wait4Bit();
+	}
+	return temp;
+}
+
+// main program
+
+void main (void)
+{
+	char check;
+	char count;
+	char packetBytes[6];
+	int a;
+	char mask;
+
+	ADCON1 = 0x7F;		// all digital
+	TRISA = 0;			// program direction
+	TRISB = 0x80;
+	PORTA = PORTB = flag = 0;
+
+	if ( PORTAbits.RA4 == 0 )	// if reconfigure
+	{
+		eeWrite( CV513, 0 );
+		eeWrite( CV521, 0 );
+	}
+
+	INTCON2bits.RBIP = 1;	// high priority
+	INTCONbits.RBIE = 1;	// enable bit change interrupt
+
+	WriteTimer0( 0 );		// intitilaize timer 0
+
+	RCONbits.IPEN = 1;		// IPEN = 1 to enable priority interrupts
+	INTCONbits.GIEH = 1;	// enable high priority interrupt
+	INTCONbits.GIEL = 0;	// enable low priority interrupt
+
+	while ( 1 )
+	{
+		count = 0;
+		while ( count != 10 )	// find preamble of at least 10 ones
+		{
+			if ( wait4Bit() == 1 )
+				count++;
+			else
+				count = 0;
+		}
+
+		while ( wait4Bit() == 1 );	// wait for additional ones
+
+		// past the preamble at this point
+
+		count = 0;
+		do 						// get all packet bytes
+		{
+			packetBytes[count++] = getByte();
+		}
+
+		while ( wait4Bit == 0 );
+
+		// got all the packet bytes count = number of them
+
+		for ( a = 0; a < count; a++ )
+			check ^= packetBytes[a];
+
+		if ( check == 0 )		// good checksum
+		{	
+			if ( ( packetBytes[0] & 0x3F ) == eeRead( CV513 ) &&
+			( ( ( packetBytes[1] >> 4 ) & 0x07 ) ^ 0x07 ) 
+				== eeRead( CV521 ) ) 	// address match
+			{ 			
+				if ( count == 3 ) // if command
+				{
+					mask = 1;
+					mask <<= packetBytes[1] & 3;
+					if ( ( packetBytes[1] & 4 ) == 0 &&
+						( packetBytes[1] & 8 ) == 0 )							
+						PORTB &= mask ^ 0xFF; 
+					else if ( ( packetBytes[1] & 4 ) == 0 &&
+						( packetBytes[1] & 8 ) == 8 )
+						PORTB |= mask;
+					else if ( ( packetBytes[1] & 4 ) == 4 &&
+						( packetBytes[1] & 8 ) == 0 )
+						PORTA &= mask ^ 0xFF;
+					else
+						PORTA |= mask; 
+				}
+				else if ( count == 5 ) // if program CV
+				{
+					if ( ( packetBytes[1] & 3 ) == 2  &&
+						packetBytes[2] == 0 ) // if CV513 
+						eeWrite( CV513, packetBytes[3]);
+					else if ( ( packetBytes[1] & 3 ) == 2 &&
+						packetBytes[2] == 8 ) // if CV521
+						eeWrite( CV521, packetBytes[3] );
+				}
+			}
+		}
+	}
+}
+

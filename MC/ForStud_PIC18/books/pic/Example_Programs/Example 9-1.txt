@@ -1,0 +1,115 @@
+/*
+ * The dishwasher program
+ */
+
+#include <p18cxxx.h>
+#include <delays.h>
+
+/* Set configuration bits
+ *  - set internal oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = INTIO2
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+
+void MyHighInt(void);		// prototypes for interrupts
+
+#pragma interrupt MyHighInt	// MyHighInt is an interrupt
+#pragma code high_vector=0x08	// high_vector is the vector at 0x08
+
+void high_vector(void)
+{
+	_asm GOTO MyHighInt _endasm
+}
+
+#pragma code
+
+// Interrupt service procedure
+//	occurs anytime door is opened
+//
+
+void MyHighInt(void)
+{
+	char a;
+	a = PORTB;				// save the current state
+	PORTB = 0;				// stop everything
+	do
+	{
+		while ( PORTBbits.RB0 == 0 ); 	// while door open
+		Delay100TCYx(10);		// 16 ms debounce
+	}while (PORTBbits.RB0 == 0 );
+	INTCONbits.INT0IF = 0;  		// clear INT0IF flag
+	PORTB = a;				// door definitely closed
+}
+
+//
+// The system clock is 250 KHz or 4 us
+//		an instruction cycle is 16 us
+//
+
+void Wait200ms(void)
+{
+	Delay100TCYx(125);	// 16 * 125 * 100 = 200ms
+}
+
+void WaitMinute(char howmany)
+{
+	int a, b;				// 300 * .2 sec = 1 minute
+	for ( a = 0; a < howmany; a++ )
+		for ( b = 0; b < 300; b++ )
+			Wait200ms();
+}
+
+void DoCycles(void)
+{
+	char a;
+	for ( a = 0; a < 4; a++ )		// repeat 4 times
+	{
+		PORTBbits.RB2 = 1;		// fill valve on
+		WaitMinute(1);		// wait 1 minute
+		PORTBbits.RB2 = 0;		// fill valve off
+		PORTBbits.RB1 = 1;		// pump motor on
+		if ( a == 1 )			// wash with soap
+		{
+			PORTBbits.RB3 = 1;
+			Wait200ms();
+			PORTBbits.RB3 = 0;
+		}
+		WaitMinute(3);		// wait 3 minutes
+		PORTBbits.RB4 = 1;		// drain solenoid on
+		WaitMinute(1);		// wait 1 minute
+		PORTB = 0;			// all off
+	}
+	PORTBbits.RB5 = 1;			// heater on
+	WaitMinute(30);			// dry for 30 minutes
+	PORTB = 0;				// all off
+}
+
+void main (void)
+{
+	OSCCON = 0x23;		// 250 KHz internal clock
+	ADCON1 = 0x7F;		// all inputs are digital
+	TRISA = 2;			// Port A bit 1 = input
+	TRISB = 1;			// Port B bit 0 = input
+	PORTB = 0;			// Turn off system
+
+	RCONbits.IPEN = 0;		// only high priority interrupt on
+	INTCON2bits.INTEDG0 = 0;	// make INT0 negative edge triggered
+	INTCONbits.INT0IE = 1;	// enable INT0
+	INTCONbits.GIE = 1;		// Enable interrupts
+	
+	while (1)
+	{
+		while ( PORTAbits.RA1 == 1 );	// Wait until WASH	
+		DoCycles();
+	}
+}
+

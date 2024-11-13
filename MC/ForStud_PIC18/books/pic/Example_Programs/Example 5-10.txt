@@ -1,0 +1,25 @@
+/*
+ * This is Example 5-10 
+ */
+
+#include <p18cxxx.h>
+#include <string.h>   
+
+/* Set configuration bits
+ *  - set HS oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ */
+
+#pragma config OSC = HS
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+
+//data memory
+
+char buffer[20];
+
+void main (void)
+{
+	memset( buffer, 0x20, 20 );
+}

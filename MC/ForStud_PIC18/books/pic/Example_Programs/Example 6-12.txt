@@ -1,0 +1,86 @@
+/*
+ * Dice Toss example written for a PIC18F1220
+ */
+
+#include <p18cxxx.h>
+
+/* Set configuration bits
+ *  - set internal clock
+ *  - enable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = INTIO2
+#pragma config WDT = ON
+#pragma config WDTPS = 256
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+// program memory data
+
+// Lookup table for dice
+//
+// 7 <0111> = 1, E <1110> = 2, 6 <0110> = 3, 
+// A <1010> = 4, 2 <0010> = 5, 8 <1000> = 6
+//
+
+rom near char lookup[] = 	// all 36 dice combinations
+{
+	0x77, 0x7E, 0x76,		// 1,1   1,2   1,3 
+	0x7A, 0x72, 0x78,		// 1,4   1,5   1,6
+	0xE7, 0xEE, 0xE6,		// 2,1   2,2   2,3
+	0xEA, 0xE2, 0xE8,		// 2,4   2,5   2,6
+	0x67, 0x6E, 0x66,		// 3,1   3,2   3,3
+	0x6A, 0x62, 0x68,		// 3,4   3,5   3,6
+	0xA7, 0xAE, 0xA6,		// 4,1   4,2   4,3
+	0xAA, 0xA2, 0xA8,		// 4,4   4,5   4,6
+	0x27, 0x2E, 0x26,		// 5,1   5,2   5,3
+	0x2A, 0x22, 0x28,		// 5,4   5,5   5,6
+	0x87, 0x8E, 0x86,		// 6,1   6,2   6,3
+	0x8A, 0x82, 0x88		// 6,4   6,5   6,6
+};
+
+// data memory data
+
+int count;			//random number
+
+// main program
+
+void main (void)
+{
+//
+// initialize system
+//
+	OSCCON =0x64;		// frequency set to 4 MHz
+	ADCON1 = 0x7F;	// all digital port pins
+	TRISB = 0x01;		// port B, bit 0, is input
+	TRISA = 0;		// port A is output
+	PORTB = 0xFF;		// all LEDs off
+	
+INTCON2bits.RBPU = 1;	// pull-ups on 
+	
+count = 0;		// start count at zero
+
+//
+// operating system loop
+//
+
+	while ( 1 )		// the one and only program loop
+	{
+		ClrWdt();	// reset watchdog
+
+		if ( PORTAbits.RA0 == 0 )		// if TOSS = 0	
+		{
+			count++;			// generate random number
+			
+			if ( count == 36 )
+				count = 0;
+			
+			PORTA = lookup[count];	// get die code
+			PORTB = lookup[count];	// get die code		
+		}
+	}
+}

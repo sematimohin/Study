@@ -1,0 +1,40 @@
+/*
+ * This is Example 5-6 
+ */
+
+#include <p18cxxx.h> 
+
+/* Set configuration bits
+ *  - set HS oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ */
+
+#pragma config OSC = HS
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+
+int seed;
+
+void main (void)
+{
+	ADCON1 = 0x7F;	// configure PORTS A and B as digital
+				// 	this might need to be changed depending 
+				// 	on the microcontroller version.
+
+	TRISB = 0;          // configure PORTB for output 
+	TRISA = 0xFF;		// configure PORTA for input
+	PORTB = 0;		// LEDs off
+	seed = 1;		// self generated random number
+
+	while ( 1 )		// repeat forever
+	{
+		while ( PORTAbits.RA4 == 0 )	// while pushbutton is down
+		{
+			seed++;
+			if ( seed == 10 )	// if seed hits 10
+				seed = 1;
+			PORTB = seed;
+		}
+	}
+}

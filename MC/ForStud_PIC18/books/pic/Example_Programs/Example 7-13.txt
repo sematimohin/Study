@@ -1,0 +1,68 @@
+/*
+ * Serial LCD example written for a PIC18F1220
+ */
+
+#include <p18cxxx.h>
+#include <delays.h>
+#include <xlcd.h>
+
+/* Set configuration bits
+ *  - set HS oscillator (4 MHz)
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = HS
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+// ROM DATA
+
+near rom char str1 = "I am PIC18F";
+near rom char str2 = "How are you?";
+
+#pragma code
+
+// main program
+
+void DelayFor18TCY( void )   // for a 4 MHz clock
+{
+	Delay10TCYx(2);			 // 20 us
+}
+void DelayPORXLCD (void)	
+{
+	Delay1KTCYx(15); 		// Delay of 15 ms
+}
+void DelayXLCD (void)
+{
+	Delay1KTCYx(5); 		// Delay of 5ms
+}
+
+void main (void)
+{	
+	ADCON1 = 0x7F;		// select al digital signals
+
+// initialize LCD
+
+	OpenXLCD(FOUR_BIT &		// open LCD
+			 LINES_5X7);
+	WriteCmdXLCD( 8 );		// display off
+	WriteCmdXLCD( 1 );		// clear dislpay
+	WriteCmdXLCD( 12 );		// display on; cursor off
+	WriteCmdXLCD( 6 );		// auto-inc; shift cursor right
+
+	While (1)
+	{
+	
+		SetDDRamAddr( 0x80 );	// line 1
+		putrsXLCD( str1 );
+		SetDDRamAddr( 0xC0 );	// line 2
+		putrsXLCD( str2 );
+
+	}
+	
+}

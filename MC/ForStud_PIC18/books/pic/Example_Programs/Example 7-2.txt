@@ -1,0 +1,45 @@
+//
+// key codes for a telephone style keypad
+//	stored as static constants in the program memory
+//
+
+rom near char lookupKey[] = 
+{
+	1, 4, 7, 10,		// left column
+	2, 5, 8, 0,		// middle column
+	3, 6, 9, 11		// right column
+};
+
+//
+// uses function Switch from Example 7-1
+//
+
+unsigned char Key(void)
+{
+	#define MASK 0x0f			// set mask
+	#define ROWS 4			// set number of rows
+
+	char a;
+	char keyCode;
+
+	PORTB = keyCode = 0;		//clear Port B & keyCode
+
+	Switch( MASK );			// de-bounce and wait for any key
+
+	PORTB = 0xFE;				// select a leftmost column
+	
+	while ( ( PORTA & MASK ) == MASK )  // while no key is found
+	{
+		PORTB = (PORTB << 1) | 1;	// get next column 
+		keyCode += ROWS;		// add rows to keycode
+	}
+
+	for ( a = 1; a != 0; a <<= 1)
+	{					// find row
+		if ( ( PORTA & a ) == 0 )
+			break;
+		keyCode++;
+	}
+
+	return lookupKey[keyCode];		// lookup correct key code
+}

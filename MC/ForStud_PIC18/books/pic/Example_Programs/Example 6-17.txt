@@ -1,0 +1,85 @@
+/*
+ * Burglar alarm interrupt
+ */
+
+#include <p18cxxx.h>
+
+/* Set configuration bits
+ *  - set RC oscillator
+ *  - enble watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = RC
+#pragma config WDT = ON
+#pragma config WDTPS = 4
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+void MyHighInt(void);
+void MyLowInt(void);	
+
+#pragma interrupt MyHighInt
+#pragma code high_vector=0x08
+
+void high_vector(void)
+{
+	_asm GOTO MyHighInt _endasm
+}
+
+#pragma interruptlow MyLowInt	// MyLowInt is an intettupt
+#pragma code low_vector=0x18	// low_vector is the vector at 0x18
+
+void low_vector(void)
+{
+	_asm GOTO MyLowInt _endasm
+}
+
+#pragma code
+
+void MyHighInt(void)		
+{
+
+}
+
+void MyLowInt(void)
+{
+	if ( INTCON3bits.INT2IF == 1 )	// is it INT2 pin?
+	{
+		INTCON3bits.INT2IF = 0;	// clear INT2IF flag
+		PORTBbits.RB4 = 1;		// turn alarm ON	
+	}
+}
+
+// main program
+
+void main (void)
+{
+
+	ADCON1 = 0x7F;		// make ports pins digital
+	TRISB = 0x24;			// make RB2 and RB5
+					// make RB4 and output
+
+	PORTB = 0x00;			// alarm off
+
+	INTCON2bits.RBPU = 1;	// Port B pullups on
+
+	RCONbits.IPEN = 1;		// IPEN = 1
+
+	INTCON2bits.INTEDG2 = 1;	// make INT2 positive edge-triggered
+	INTCON3bits.INT2IP = 0;		// make INT2 low priority
+	INTCON3bits.INT2IE = 1;		// enable INT2
+
+	INTCONbits.GIEH = 1;	// enable high priority interrupts
+	INTCONbits.GIEL = 1;	// enable low priority interrupts
+
+	while( 1 )			// main program loop
+	{
+		ClrWdt();		// pet spot
+		if ( PORTBbits.RB5 == 0 )		// pushbutton pressed
+			PORTBbits.RB4 = 0;		// alarm off
+	}
+}

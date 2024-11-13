@@ -1,0 +1,108 @@
+/*
+ * Real-time clock (RTC) for a PIC18F1220
+ */
+
+#include <p18cxxx.h>
+
+/* Set configuration bits
+ *  - set RC oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = RC
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+// ************ INTERRUPT PROTOYPE *********************
+
+void MyHighInt(void);
+
+#pragma interrupt MyHighInt
+#pragma code high_vector=0x08
+
+// ************ HIGH PRIORIY INTERRUPT VECTOR **********
+
+void high_vector(void)
+{
+	_asm GOTO MyHighInt _endasm
+}
+
+// *********** DATA MEMORY *****************************
+
+// time of day counters
+
+#pragma udata access IntMyData	//place in the access bank
+
+near char seconds;			// seconds
+near char minutes;			// minutes
+near char hours;			// hours
+
+// ************** FUNCTIONS ***************************
+
+#pragma code
+
+// function to increment the clock
+
+void DoTime(void)			// do the clock once per second
+{
+	TMR1H = 0x80;			// preload Timer 1 with 0x8000
+					// TIMR1L is already 0x00		
+	PIR1bits.TMR1IF = 0;	// clear Timer 1 interrupt
+
+	seconds++;			// increment seconds
+
+	if ( seconds == 60 )	// if seconds hits 60
+	{
+		seconds = 0;		// clear seconds back to zero
+		minutes++;		// increment minutes
+
+		if ( minutes == 60 )	// if minutes hits 60
+		{
+			minutes = 0;		// clear minutes
+			hours++;		// increment hours
+			if ( hours == 24 )	// if hours hits 24
+				hours = 0;	// clear hours
+		}
+	}	
+}
+
+// Interrupt service procedure
+
+void MyHighInt(void)		// context saved
+{
+	if ( PIR1bits.TMR1IF == 1 )
+		DoTime();
+
+	// test other interrupt flags here
+}
+
+// main program
+
+void main (void)
+{
+	ADCON1 = 0x7f;		// program for digital pins
+ 
+	TRISA = 0xFF;			// Port A is input
+
+	RCONbits.IPEN = 1;		// IPEN = 1
+
+	TMR1L = 0;			// preload Timer 1 with 0x8000
+	TMR1H = 0x80;
+
+	T1CON = 0x0F;			// select external clock and enable Timer 1
+
+	seconds = minutes = hours = 0;	// start clock at midnight
+
+	IPR1bits.TMR1IP = 1;	// make Timer 1 high priority
+	PIE1bits.TMR1IE = 1;	// enable timer 1 interrupt
+
+	INTCONbits.GIEH = 1;	// enable high priority interrupts
+
+	// do other stuff
+
+}

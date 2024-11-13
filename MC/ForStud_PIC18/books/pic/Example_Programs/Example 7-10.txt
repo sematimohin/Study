@@ -1,0 +1,95 @@
+/*
+ * LCD example written for a PIC18F1220
+ * 	for a 2MHz internal RC clock
+ */
+
+#include <p18cxxx.h>
+#include <delays.h>
+
+/* Set configuration bits
+ *  - set RC oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = RC
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+#pragma code
+
+char str1[] = "Hello";
+char str2[] = "I'm the PIC18";
+
+// main program
+
+#define LCD PORTB			// define data port
+#define RS PORTBbits.RB5		// define RS
+#define E PORTBbits.RB4		// define E
+
+
+void SendLCDdata(char data, char rs)
+{
+	LCD = data >> 4;		// send left nibble
+	RS = rs;			// control RS
+	E = 1;				// pulse E
+	E = 0;
+	Delay10TCYx( 2 );		// delay 40 us 
+	LCD = data & 0x0F;		// send right nibble
+	RS = rs;			// control RS
+	E = 1;				// pulse E
+	E = 0; 	
+	Delay10TCYx( 2 );		// delay 40 us 
+
+}
+
+void InitLCD(void)
+{
+	char a;
+
+	Delay1KTCYx(10); 		// wait 20 ms (see text)
+
+	for ( a = 0; a < 4; a++ )
+	{
+		SendLCDdata( 0x30, 0 );	// send 0x30
+		Delay1KTCYx( 3 );		// wait 6 ms
+	}
+
+	SendLCDdata( 0x08, 0 );	// send 0x08
+	SendLCDdata( 0x01, 0 );	// send 0x01
+	Delay1KTCYx( 1 );		// wait 2 ms
+	SendLCDdata( 0x0C, 0 );	// send 0x0C
+	SendLCDdata( 0x06, 0 );	// send 0x06
+}
+
+void CLS(void)
+{
+	SendLCDdata( 0x01, 0 );	// send 0x01
+	Delay1KTCYx( 1 );		// wait 2 ms 
+}
+
+void String(char *str, char position)
+{
+	int ptr = 0;
+	SendLCDdata(position, 0);	// send position
+	while ( str[ptr] != 0 )
+		SendLCDdata(str[ptr++], 1);	// send character 	
+}
+
+void main (void)
+{	
+	ADCON1 = 0x7F;		// select al digital signals
+	TRISB = 0;			// Port B is output
+	PORTB = 0;			// all Port B pins = 0
+	InitLCD();			// initialize LCD
+
+	while (1)
+	{
+		String( str1, 0x80 );
+		String( str2, 0xC0 );
+	}
+}

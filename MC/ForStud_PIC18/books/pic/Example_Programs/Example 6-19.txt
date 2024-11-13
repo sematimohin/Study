@@ -1,0 +1,51 @@
+#pragma udata
+
+char timeString[12];		// time string
+
+
+#pragma code
+
+void getTimeString(int mode)
+{
+	char ptr = 0;			// point to array element 0
+	char tempHours = hours;
+	char amPM = 'A';
+
+	if ( mode == 1 )		// 12 hour mode
+	{
+		if ( hours >= 12 )	// convert to 12 hour format
+		{
+			tempHours -= 12;
+			amPM = 'P';		
+		}
+		if ( tempHours == 0 )
+			tempHours = 12;
+	}
+	
+if ( ( tempHours / 10 ) == 0 )	// blank leading zero
+		timeString[ptr++] = ' ';	
+else
+		timeString[ptr++] = tempHours / 10 + 0x30;
+
+	timeString[ptr++] = tempHours % 10 + 0x30;
+
+	timeString[ptr++] = ':';
+	timeString[ptr++] = minutes / 10 + 0x30;
+	timeString[ptr++] = minutes % 10 + 0x30;
+	
+	timeString[ptr++] = ':';
+	timeString[ptr++] = seconds / 10 + 0x30;
+	timeString[ptr++] = seconds % 10 + 0x30;
+
+	if ( mode == 1 )		// 12 hour mode
+	{
+		timeString[ptr++] = ' ';
+		timeString[ptr++] = amPM;
+		timeString[ptr++] = 'M';
+	}
+
+	timeString[ptr] = 0;	// terminate string
+}
+
+
+

@@ -1,0 +1,46 @@
+/*
+ * This is Example 5-4 for a 4 MHz clock
+ *	written for the PIC18F1220
+ */
+
+#include <p18cxxx.h>   	//include port specifications
+#include <delays.h>		//include time delays
+
+/* Set configuration bits
+ *  - set HS oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ */
+
+#pragma config OSC = HS
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+
+int counter;
+
+#define mSec Delay1KTCYx(1)		// mSec = 1 millisecond
+
+void main (void)
+{
+	ADCON1 = 0x7F;	// configure PORTS A and B as digital
+				// 	this might need to be changed depending 
+				// 	on the microcontroller version.
+    	TRISB = 0;          // configure PORTB for output 
+	TRISA = 0xFF;		// configure PORTA for input
+	PORTB = 0;		// LEDs off
+
+	while ( 1 )		// program infinite loop
+	{
+		counter = 0;				// initialize counter
+		while ( PORTAbits.RA4 == 0 )	// while pushbutton is down
+		{
+			mSec;				// wait 1 msec
+			counter++;
+			if ( counter == 1000 )   	// 1 second
+			{
+				PORTB++;
+				counter = 0;
+			}
+		}
+	}
+}

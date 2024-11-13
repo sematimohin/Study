@@ -1,0 +1,54 @@
+;***************** Div16 function *******************
+;
+; uses 1 program stack level
+; uses WREG, PRODL, PRODH, TABLAT, TBLPTRL, TBLPTRH,
+;      FSR0, and FSR1
+;
+; Quotient returned in location addressed by FSR2
+;     PRODL and PRODH is preloaded with divisor
+;     FSR0 is preloaded with address of dividend
+;     FSR0 address remainder on return
+
+Div16:
+	MOVLW	.16			;load counter with 16
+	MOVFF	WREG, TABLAT
+Div16a:
+	MOVLW	1			;shift quotient left
+	BCF	STATUS, 0
+	RLCF	INDF2
+	RLCF	PLUSW2
+
+	BCF	STATUS, 0		;shift dividend left
+	RLCF	POSTINC0
+	RLCF	POSTINC0
+	RLCF	POSTINC0
+	RLCF	POSTDEC0
+	
+	MOVF	PRODL, 0		;compare divisor and dividend
+	SUBWF	POSTINC0, 0
+	MOVWF	TBLPTRL	
+	MOVF	PRODH, 0
+	SUBWFB	POSTDEC0, 0
+	MOVWF	TBLPTRH
+	BNC	Div16b
+	
+	MOVFF	TBLPTRL, POSTINC0	;subtract
+	MOVFF	TBLPTRH, POSTDEC0
+	
+	INCF	INDF2			;increment quotient
+	BNC	Div16b
+	MOVLW	1
+	INCF	PLUSW2
+
+Div16b:
+	MOVLW	0
+	IORWF	POSTDEC0
+	IORWF	POSTDEC0
+	DECFSZ	TABLAT			;decrement counter
+	BRA	Div16a
+	
+	IORWF	POSTINC0
+	IORWF	POSTINC0
+
+	RETURN
+ 

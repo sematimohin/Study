@@ -1,0 +1,208 @@
+// Power Unit Example
+//
+
+#include <p18cxxx.h>
+#include <sw_uart.h>
+#include <delays.h>
+#include <usart.h>
+
+/* Set configuration bits
+ *  - set RC oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = RC
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+// ********* DATA MEMORY VARIABLES ************
+
+#pragma udata
+
+char readQueue[32];
+char writeQueue[32];
+
+char readInPtr;
+char readOutPtr;
+char writeInPtr;
+char writeOutPtr;
+
+// **************** FUNCTIONS ******************
+
+void MyHighInt(void);	
+
+#pragma interrupt MyHighInt
+#pragma code high_vector=0x08
+
+void high_vector(void)
+{
+	_asm GOTO MyHighInt _endasm
+}
+
+#pragma code
+
+int GetWriteQueue(void)
+{
+	int temp;
+	if ( writeInPtr == writeOutPtr )
+		return 0x100;		// if empty
+	temp = writeQueue[writeOutPtr];	// get data
+	writeOutPtr = ( writeOutPtr + 1 ) & 0x1F;
+	return temp;
+}
+
+int SaveWriteQueue(char data)
+{
+	if ( writeInPtr == ( ( writeOutPtr + 1 ) & 0x1F ) )
+		return 0x100;		// if full
+	writeQueue[writeInPtr] = data;
+	writeInPtr = ( writeInPtr + 1 ) & 0x1F;
+	return 0;
+}
+int GetReadQueue(void)
+{
+	int temp;
+	if ( readInPtr == readOutPtr )
+		return 0x100;		// if empty
+	temp = readQueue[readOutPtr];	// get data
+	readOutPtr = ( readOutPtr + 1 ) & 0x1F;
+	return temp;
+}
+
+int SaveReadQueue(char data)
+{
+	if ( readInPtr == ( ( readOutPtr + 1 ) & 0x1F ) )
+		return 0x100;		// if full
+	readQueue[readInPtr] = data;
+	readInPtr = ( readInPtr + 1 ) & 0x1F;
+	return 0;
+}
+void MyHighInt(void)		
+{
+	int temp;
+	if ( PIR1bits.RCIF == 1 )	// is it USART receiver?
+	{
+		PIR1bits.RCIF = 0;		// clear interrupt
+		SaveWriteQueue( RCREG ); 
+	}
+	else if ( PIR1bits.TXIF == 1 )	// is it USART transmitter
+	{
+		PIR1bits.TXIF = 0;		// clear interrupt
+		temp = GetReadQueue();	// get queue data
+		if ( temp == 0x100 )
+			TXSTAbits.TXEN = 0;	// transmitter off
+		else
+			TXREG = temp;		// send data
+	}
+}
+
+//
+// ************ TIME DLEAYS FOR SOFTWARE UART ******************
+//	These delays must be provided to use the software UART in
+//	the C18 library
+//
+
+void DelayRXHalfBitUART(void)
+{
+	Delay10TCYx(1);
+	Delay1TCY();
+	Delay1TCY();
+	Delay1TCY();
+	Delay1TCY();
+	Delay1TCY();
+	Delay1TCY();
+	Delay1TCY();
+	Delay1TCY();
+}
+
+void DelayRXBitUART(void)
+{
+	Delay10TCYx(3);
+	Delay1TCY();
+	Delay1TCY();
+	Delay1TCY();
+	Delay1TCY();
+	Delay1TCY();
+	Delay1TCY();
+	Delay1TCY();
+	Delay1TCY();
+	Delay1TCY();
+}
+void DelayTXBitUART(void)
+{
+	Delay10TCYx(4);
+	Delay1TCY();	
+}
+
+// **************** MAIN PROGRAM *************************
+
+void main (void)
+{
+	char temp;
+	char count = 0xFF; 
+	ADCON1 = 0x7F;		// make ports pins digital
+	TRISC = 0x80;		// program ports
+	TRISB = 0x20;
+	PORTB = 1;			// setup transmit to Net
+
+	RCONbits.IPEN = 0;	// only high priority interrupt
+
+// setup USART and queue
+
+	IPR1bits.RCIP = 0;			// TXBIP is errata
+
+	readInPtr = readOutPtr = writeInPtr = writeOutPtr = 0;
+
+	OpenUSART(USART_TX_INT_OFF &	//USART operates at 9600 Baud
+			USART_RX_INT_OFF &
+			USART_ASYNCH_MODE &
+			USART_EIGHT_BIT &
+			USART_SINGLE_RX &
+			USART_BRGH_HIGH,
+			12 );
+
+// Open software UART
+
+	OpenUART();	
+	while(1)
+	{
+		if ( PORTBbits.RB0 == 1 )
+		{
+			INTCONbits.GIE = 1;	// enable high priority interrupt
+			temp = GetWriteQueue();	// get from COM port
+			if ( temp != 100 )
+			{
+				INTCONbits.GIE = 0;	// disable
+				WriteUART( temp );	// write to Net
+				if ( count != 0xFF )
+				{
+					count--;
+					if ( count == 0 )
+					{
+						count = 0xFF;
+						PORTBbits.RB0 = 0;	// turn line around
+					}
+				}	
+				if ( temp == 0x18 )
+					count = 3;
+			}
+		}	
+		else
+		{
+			INTCONbits.GIE = 0;	
+			temp = ReadUART();
+			SaveReadQueue( temp );
+			PIE1bits.TXIE = 1;		// transmitter on
+			INTCONbits.GIE = 1;
+			if ( temp == 0xFF || temp == 6 || temp == 0x21 )
+				PORTBbits.RB0 = 1;		// turn line around	
+		}
+	}
+}
+
+

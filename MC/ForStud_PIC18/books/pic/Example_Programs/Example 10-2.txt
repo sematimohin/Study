@@ -1,0 +1,683 @@
+/*
+ * "Inventory control system"
+ */
+
+#include <p18cxxx.h>   
+#include <timers.h>
+#include <delays.h>
+#include <sw_uart.h>
+
+/* Set configuration bits
+ *  - set internal oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - master clear enabled
+ */
+#pragma config OSC = INTIO2
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config MCLRE = ON
+
+// program memory data
+
+rom near char str1[] = "Uploading to the PC.";
+rom near char str2[] = "Ready to swipe code.";
+rom near char str3[] = "              Ct=   ";
+                       
+
+rom near char odd[] = 
+{
+	0b10010000,		//binary data 0bxxxxxxxx
+	0b01010100,
+	0b01000101,
+	0b00110000,
+	0b00001001,
+	0b00011000,
+	0b00000011,
+	0b00100001,
+	0b00010010,
+	0b10000001
+};
+
+rom near char oddbw[] = 
+{
+	0b00000110,
+	0b00010101,
+	0b01010001,
+	0b00001100,
+	0b01100000,
+	0b00100100,
+	0b11000000,
+	0b01001000,
+	0b10000100,
+	0b01000010
+};
+
+rom near char even[] = 
+{
+	0b00000110,
+	0b00010101,
+	0b01010001,
+	0b00001100,
+	0b01100000,
+	0b00100100,
+	0b11000000,
+	0b01001000,
+	0b10000100,
+	0b01000010
+};
+
+rom near char evenbw[] = 
+{
+	0b10010000,
+	0b01010100,
+	0b01000101,
+	0b00110000,
+	0b00001001,
+	0b00011000,
+	0b00000011,
+	0b00100001,
+	0b00010010,
+	0b10000001
+};
+
+rom near char right[] =
+{
+	0b10010000,
+	0b01010100,
+	0b01000101,
+	0b00110000,
+	0b00001001,
+	0b00011000,
+	0b00000011,
+	0b00100001,
+	0b00010010,
+	0b10000001
+};
+
+rom near char rightbw[] = 
+{
+	0b00000110,
+	0b00010101,
+	0b01010001,
+	0b00001100,
+	0b01100000,
+	0b00100100,
+	0b11000000,
+	0b01001000,
+	0b10000100,
+	0b01000010
+};
+
+rom near char lookupKey[] = 
+{
+	1, 4, 7, 10,	// left column
+	2, 5, 8, 0,		// middle column
+	3, 6, 9, 11		// right column
+};
+			
+// Define EEPROM addresses
+
+#define addrl 0
+#define addrh 1
+
+// Data memory variable
+
+char goodUPC;
+char timeOut;
+char pulse;
+int halfPulseWidth;
+char UPC[14];
+char UPCptr;
+char type;
+
+#pragma interrupt MyHighInt	save=PROD					
+#pragma code high_vector=0x08		// high_vector is at 0x0008
+
+void high_vector(void)			// the high prioity vector
+{
+	_asm GOTO MyHighInt _endasm	// goto high software
+}
+
+#pragma code
+
+// Reads a data EEPROM location from address
+
+char eeRead(char address)
+{
+	EECON1bits.EEPGD = 0;
+	EEADR = address;
+	EECON1bits.RD = 1;
+	return EEDATA;
+}
+
+// Write a data EEPROM location at address with data
+
+void eeWrite(char address, char data)
+{	char temp;
+	temp = INTCONbits.GIEH;
+	INTCONbits.GIEH = 0;	
+	EECON1bits.EEPGD = 0;	
+	EECON1bits.WREN = 1;
+	EEADR = address;
+	EEDATA = data;
+	EECON2 = 0x55;
+	EECON2 = 0xAA;
+	EECON1bits.WR = 1;
+	while ( PIR2bits.EEIF == 0 );
+	PIR2bits.EEIF = 0;	
+	EECON1bits.WREN = 0;
+	if ( temp == 1 )
+		INTCONbits.GIEH = 1;		
+}
+
+// Send LCD byte data, with RS = rs
+
+#define RS PORTAbits.OSC1
+#define E PORTAbits.RA0
+
+void SendLCDdata( char data, char rs )
+{
+	PORTB = ( data >> 4 ) | 0x80 ;	// send left nibble
+	RS = 1;				// set RS
+	E = 1;					// pulse E
+	E = 0; 
+	Delay10TCYx(4);			// wait 40 us
+	PORTB = ( data & 0x0F ) | 0x80;	// send right nibble
+	RS = 1;					// set RS
+	E = 1;					// pulse E
+	E = 0; 	
+	Delay10TCYx(4);			// wait 40 us
+}
+
+// Initialize LCD
+
+void InitLCD(void)				// intialize LCD
+{
+	Delay1KTCYx(20); 			// wait 20 ms 
+	SendLCDdata(0x30, 0);		// send 0x30
+	Delay1KTCYx(6);			// wait 6 ms
+	SendLCDdata(0x30, 0);		// send 0x30
+	Delay10TCYx(10);			// wait 100 us
+	SendLCDdata(0x30, 0);		// send 0x30
+	SendLCDdata(0x30, 0);		// send 0x30
+	SendLCDdata(0x08, 0);		// send 0x08
+	SendLCDdata(0x01, 0);		// send 0x01
+	Delay1KTCYx(2);			// wait 2 ms 
+	SendLCDdata(0x0C, 0);		// send 0x0C
+	SendLCDdata(0x06, 0);		// send 0x06
+}
+
+// Display a program memory based string (str) at position
+
+void DisplayStringPgm( char position, rom char *str )
+{
+	char ptr = 0;
+	SendLCDdata(position, 0);	// send position
+	while ( str[ptr] != 0 )
+		SendLCDdata(str[ptr++], 1);	// send character
+}
+
+char lookup(rom char* table, char temp)
+{
+	char a;
+	for ( a = 0; a < 10; a++ )
+		if ( table[a] == temp )
+			break;
+	return a;
+}
+
+void Abort(void)
+{
+	char temp = UPC[0];
+	char a;
+	char count = 0;
+	CloseTimer0();
+	WriteTimer0( 0 );
+	if ( UPCptr > 5 && UPCptr < 7 )	// regular UPC-E
+	{
+		if ( type = 1 )	// backward UPC-E
+		{
+			for ( count = 0; count < 3; count++ )
+				UPC[count] = lookup(oddbw, UPC[count]);
+			for ( count = 3; count < 6; count++ )
+				UPC[count] = lookup(evenbw, UPC[count]);
+			for ( count = 0; count < 3; count++)
+			{
+				temp = UPC[5 - count];
+				UPC[5 - count] = UPC[count];
+				UPC[count] = temp;
+			}
+			goodUPC = 1;	
+		}
+		else			// forward UPC-E
+		{
+			for ( count = 0; count < 3; count++ )
+				UPC[count] = lookup(even, UPC[count]);
+			for ( count = 3; count < 6; count++ )
+				UPC[count] = lookup(odd, UPC[count]);
+			goodUPC = 1;	
+		}
+	}
+	else if ( UPCptr > 7 )
+	{ 
+		for ( a = 0; a < 4; a++ )
+		{
+			count += temp & 3;
+			temp >>= 2;
+		}	
+		if ( ( temp & 1 ) == 0 )
+		{				// backward UPC-A
+			for ( count = 0; count < 6; count++ )
+				UPC[count] = lookup(rightbw, UPC[count]);
+			for ( count = 7; count < 13; count++ )
+				UPC[count - 1] = lookup(oddbw, UPC[count]);	
+			for ( count = 0; count < 6; count++ )
+			{
+				temp = UPC[11 - count];
+				UPC[11 - count] = UPC[count];
+				UPC[count] = temp;
+			}
+			goodUPC = 2;
+		}
+		else
+		{				// regular UPC-A
+			for ( count = 0; count < 6; count++ )
+				UPC[count] = lookup(odd, UPC[count]);
+			for ( count = 7; count < 13; count++ )
+				UPC[count - 1] = lookup(right, UPC[count]);
+			goodUPC = 2;
+		}
+	}
+}
+
+void MyHighInt(void)
+{
+	int temp;
+	if ( PIR1bits.TMR1IF == 1 )
+	{
+		PIR1bits.TMR1IF = 0;
+		WriteTimer1( -12500 );
+		if ( timeOut != 0 )
+		{
+			timeOut--;
+			if ( timeOut == 0 )
+				Abort();
+		}
+	}
+	else if ( INTCONbits.RBIF == 1 )
+	{
+		temp = PORTB;			// must read PORTB to clear change
+		INTCONbits.RBIF = 0;	// clear interrupt
+		if ( ReadTimer0() == 0 ) // initial
+		{
+			OpenTimer0(TIMER_INT_OFF &
+					T0_16BIT &
+					T0_SOURCE_INT &
+					T0_PS_1_64 );		// 64 us period
+			WriteTimer0( 1 );
+			timeOut = 3;
+			pulse = UPCptr = type = 0;
+		}
+		else if ( pulse == 0 )
+		{
+			halfPulseWidth = ReadTimer0() / 2;
+			WriteTimer0( 1 );
+			pulse++;
+			timeOut = 3;
+			WriteTimer0( 1 );
+		}		
+		else if ( pulse < 3 )
+		{
+			halfPulseWidth = ( halfPulseWidth + ReadTimer0() / 2 ) / 2;
+			WriteTimer0( 1 );
+			pulse++;
+			timeOut = 3;
+		}
+		else
+		{
+			temp = ReadTimer0();
+			WriteTimer0( 1 );
+			if ( temp <= halfPulseWidth * 3 )
+				temp = 0;
+			else if ( temp <= halfPulseWidth * 5 )
+				temp = 1;
+			else if ( temp <= halfPulseWidth * 7 )
+				temp = 2;
+			else
+				temp = 3;
+			UPC[UPCptr] = UPC[UPCptr] << 2 | temp;
+			pulse++;
+			timeOut = 3;
+			if ( pulse % 4 == 3 )
+			{
+				if ( pulse == 7 )
+				{
+if ( ( UPC[UPCptr] & 0x3F ) == 0 ) // UPC-E backward
+					{
+						type = 1;
+						pulse -= 3;
+						UPC[UPCptr] >= 6;
+						UPCptr--;
+					}
+				}
+				UPCptr++;					
+			}
+		}
+	}
+}
+
+// ***************** CONSTANTS *************************
+
+#define SCL PORTBbits.RB6			// RB6 is SCL
+#define SDA PORTAbits.OSC1			// OSC1 is SDA
+#define SDA_TRIS TRISAbits.TRISA7		
+
+//*************** SERIAL EEPROM FUNCTIONS **************
+
+void SendStart(void)	// send Start 
+{
+	SDA_TRIS = 1;		// SDA = 1
+	SCL = 1;		// SCL = 1
+	SDA_TRIS = 0;		// SDA = 0
+	SCL = 0;       	// SCL = 0    
+}
+
+void SendStop(void)		// send Stop
+{
+    	SCL = 0;		// SCL = 0
+	SDA_TRIS = 0; 	// SDA = 0
+ 	SCL = 1;		// SCL = 1
+	SDA_TRIS = 1;    	// SDA = 1
+}
+
+char SendSM(char data)	// send a byte
+{
+	char a, b, c;
+	c = 0;
+	for ( a = 0; a < 8; a++ )
+	{	
+		SCL = 0;			// SCL = 0
+		if ( ( data & 0x80 ) == 0x80 )	// leftmost data bit
+			SDA_TRIS = 1;		// SDA = 1
+		else
+			SDA_TRIS = 0;		// SDA = 0
+		data <<= 1;			// shift data left
+		SCL = 1;			// SCL = 1
+	}
+	SCL = 0;				// SCL = 0
+	SDA_TRIS = 1;	
+	SCL = 1;				// SCL = 1
+    	if ( SDA == 1 ) 			// Check SDA for ACK
+        	c = 1;             		
+	SCL = 0;				// SCL = 0
+	return c;				// return ACK
+}
+
+char ReadSM(void)				// read a byte
+{
+   	char a;          
+    	char b = 0;       	
+	SDA_TRIS = 1;				// set SDA for read	
+	SCL = 0;				// SCL = 0
+	for (a = 0; a < 8; a++)    
+    	{
+		b <<= 1;       		// Shift left for next bit    
+		SCL = 1;	  		// SCL = 1
+    		if ( SDA == 1 )                       
+        		b |= 1;		// add in SDA if 1      
+		SCL = 0;			// SCL = 0
+    	}
+	SDA_TRIS = 0;				// SDA = 0
+    	return b;				// return retrieved data
+}
+
+void Ack(char control)			// test ACK
+{
+	char a = 1;
+ 	do
+    	{
+    		SendStart();                 
+     		a = SendSM( control ); 	// Output control byte
+    	}
+	while (a == 1);
+	SendStop();                  
+}
+
+// Read a byte from memory
+//	address is 0x0000 -- 0xFFFF
+
+char ReadByte(int address)
+{
+	char a = 0;
+	SDA = 0;				// make certain SDA = 0
+	SendStart();
+	if ( ( address & 0x8000 ) == 0x8000 )
+		a = 2;
+	else
+		a = 0;
+	SendSM( 0xA0 + a );			// command (write address)
+	SendSM(address >> 8 );
+	SendSM(address);
+	SendStart();
+	SendSM( 0xA1 | a );			// command (read data)
+	a = ReadSM();
+	SendStop();
+	return ( a );
+}
+
+void WriteByte(int address, char data)
+{
+	char a = 0;
+	SDA = 0;				// make certain SDA = 0
+	SendStart();
+	if ( ( address & 0x8000 ) == 0x8000 )
+		a = 2;
+	SendSM( 0xA0 | a );
+	SendSM( address >> 8 );
+	SendSM( address );
+	SendSM( data );
+	SendStop();
+	Ack( 0xA0 | a );	// wait for ACK	
+}
+
+#define KEYPORT PORTA	// change to match the actual port
+#define DELAY 15		// change as needed for time delay
+
+void Switch( char bit )
+{
+	do		// wait for release
+	{
+		while ( ( KEYPORT & bit ) != bit );
+		Delay1KTCYx(DELAY);
+
+	}while( ( KEYPORT & bit ) != bit );
+
+	do		// wait for press 
+	{
+		while ( ( KEYPORT & bit ) == bit );
+		Delay1KTCYx(DELAY);
+
+	}while( ( KEYPORT & bit ) == bit );
+}
+ 
+unsigned char Key(void)
+{
+	#define MASK 0x1E		// set mask
+	#define ROWS 4		// set number of rows
+
+	int a;
+	unsigned char keyCode;
+
+	keyCode = 0;			//clear Port B & keyCode
+	PORTB = PORTB & 0xF8;	
+
+	Switch( MASK );		// de-bounce and wait for any key
+
+	PORTB = PORTB & 0xFE;	// select a leftmost column
+	
+	while ( ( PORTA & MASK ) == MASK )  // while no key is found
+	{
+		PORTB = (PORTB << 1) | 1;	// get next column 
+		keyCode += ROWS;		// add rows to keycode
+	}
+	for ( a = 1; a != 0; a <<= 1)
+	{					// find row
+		if ( ( PORTA & a ) == 0 )
+			break;
+		keyCode++;
+	}
+	return lookupKey[keyCode];		// lookup correct key code
+}
+
+int GetCount(void)
+{
+	char number[3];
+	int retval = 0;
+	char count = 0;
+	char temp = Key();
+	while ( temp != 11 )
+	{
+		if ( temp == 10 && count != 0 )
+		{
+			count--;
+			SendLCDdata( 0x90 | count + 1, 0 );
+			SendLCDdata( ' ' , 1);
+			SendLCDdata( 0x90 | count + 1, 0 );
+		}
+		else 
+		{
+			number[count] = temp;
+			if ( count != 2 )
+				count++;
+		}
+		temp = Key();
+	}
+	for ( temp = 0; temp < count; temp++ )
+		retval = retval * 10 + number[temp];
+	return retval;
+}
+
+void SendPC(void)
+{
+	int addr;
+	int addr1 = 0;
+	addr = eeRead(addrl);
+	addr = (int) eeRead(addrh) << 8;
+	while( ReadUART() != 1 );
+	WriteUART(1);
+	while ( addr != addr1 )
+		WriteUART(ReadByte(addr1++)); 
+	eeWrite( addrl, 0 );
+	eeWrite( addrh, 0 );
+}
+
+void GetUPC(void)
+{
+	int addr;
+	int count;
+	DisplayStringPgm( 0x80, str3 );
+	SendLCDdata( 0x80, 0 );
+	for ( count = 0; count < 6; count++ )
+		SendLCDdata( UPC[count] + 0x30, 1 );
+	if ( goodUPC == 2 )
+	{
+		SendLCDdata( '-', 1 );
+		for ( count = 6; count < 12; count++ )
+			SendLCDdata( UPC[count] + 0x30, 1);
+	}
+	count = GetCount();
+	if ( count != 0 )
+	{
+		addr = eeRead(addrl);
+		addr = (int) eeRead(addrh) << 8;
+		if ( goodUPC = 1 )
+		{
+			WriteByte( addr++, 1 );
+			for ( count = 0; count < 6; count++ )
+				WriteByte(addr++, UPC[count]);
+		}
+		else
+		{
+			WriteByte( addr++, 2 );
+			for ( count = 0; count < 12; count++ )
+				WriteByte(addr++, UPC[count]);
+		}
+		WriteByte( addr++, count );
+		WriteByte( addr++, count >> 8 );
+		eeWrite( addrl, addr );
+		eeWrite( addrh, addr >> 8 );
+	}
+	goodUPC = 0;
+	DisplayStringPgm( 0x80, str2 );
+}
+
+void DelayTXBitUART(void)
+{
+	Delay10TCYx(9);
+	Delay1TCY();
+	Delay1TCY();
+	Delay1TCY();
+}
+
+void DelayRXHalfBitUART(void)
+{
+	Delay10TCYx(4);
+	Delay1TCY();
+	Delay1TCY();
+	Delay1TCY();
+	Delay1TCY();
+}
+
+void DelayRXBitUART(void)
+{
+	Delay10TCYx(9);
+	Delay1TCY();
+}
+
+void main (void)
+{
+	OSCCON = 0x62;		// internal 4 MHz clock
+	ADCON1 = 0x7F;		// I/O is digital
+	TRISA = 0x7E;
+	TRISB = 0xA0;
+	PORTA = 0x80;
+	PORTB = 0xA0;
+
+	InitLCD();
+	goodUPC = timeOut = 0;
+
+	WriteTimer0( 0 );
+
+	OpenTimer1(TIMER_INT_ON &	// every 8 us
+		     T1_16BIT_RW &
+		     T1_SOURCE_INT &
+		     T1_PS_1_8 );
+
+	WriteTimer1( -12500 );
+
+	OpenUART();
+
+	INTCONbits.RBIE = 1;
+	PIE1bits.TMR1IE = 1;
+	INTCONbits.GIEH = 1;
+
+	if ( eeRead( addrl ) == 0xFF && eeRead( addrh ) == 0xFF )
+	{
+		eeWrite( addrl, 0 );
+		eeWrite( addrh, 0 );
+	}
+	if ( ( PORTA & 6 ) == 0 &&
+		   eeRead( addrl ) != 0 && eeRead( addrh ) != 0 )
+	{
+		DisplayStringPgm( 0x80, str1 );
+		SendPC();	
+	}
+	DisplayStringPgm( 0x80, str2 );
+
+	while( 1 )
+	{
+		if ( goodUPC != 0 )
+			GetUPC();
+	}
+}

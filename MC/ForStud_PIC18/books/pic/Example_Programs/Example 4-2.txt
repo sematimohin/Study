@@ -1,0 +1,81 @@
+;
+;data memory data
+;
+MyData UDATA_ACS
+
+Stack		RES .16		;define stack space
+Ascii_L	RES 1			;place for ASCII low
+Ascii_H	RES 1			;place for ASCII high
+
+
+;************* FUNCTION Hex2Ascii ***********
+;                                            
+; uses 1 program stack level
+; uses 2 data stack level                        
+; uses WREG        
+;                      
+; converts right nibble of WREG from hex 
+;     to Ascii returned on the data stack
+;                                            
+;********************************************
+
+Hex2Ascii:
+	ANDLW	0x0F			;isolate low nibble
+	ADDLW	0x30
+	DAW
+	BTFSC	WREG, 6
+	INCF	WREG
+	RETURN
+
+
+
+;************ FUNCTION Hex2Asc **************
+;                                            
+; uses 2 program stack levels
+; uses 1 data stack locations                        
+; uses Hex2Ascii
+; uses Ascii_L and Ascii_H                                  
+;
+; converts byte in WREG from hex to Ascii
+;	results are in Ascii_L and Ascii_H
+;                                            
+;********************************************
+
+Hex2Asc:
+	MOVFF	WREG, POSTDEC2	;stack WREG (save WREG)
+	
+	CALL	Hex2Ascii		;convert low nibble
+	MOVFF	WREG, Ascii_L
+	MOVFF	PREINC2, WREG		;get WREG
+	MOVFF	WREG, POSTDEC2	;restack WREG
+
+	SWAPF	WREG			;swap nibbles
+	CALL	Hex2Ascii		;convert high nibble
+	MOVFF	WREG, Ascii_H
+	
+	MOVFF	PREINC2, WREG		;un-stack WREG
+	RETURN  
+
+;************** MAIN PROGRAM ******************
+;
+; Illustrates a function call to Hex2Asc 
+;     Converts 0x5c to ASCII in Ascii_l (0x43)
+;     and in Ascii_H (0x35) 
+:
+
+Main:
+	;
+	;if a stack is used in a program it should be
+	;initialized first and only once
+	;
+
+	LFSR	2, Stack+.15	;initialize data stack pointer
+	MOVLW	0x5c		;load test data
+
+	CALL	Hex2Asc	;convert entire byte to Ascii
+				;results on data stack
+
+	;********* Other software here **********
+
+
+Stop:	BRA Stop

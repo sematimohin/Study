@@ -1,0 +1,154 @@
+;************* SendChar Function **************
+;
+; uses program 3 stack levels
+; uses LookUp, KeyOn, KeyOff, Delay24, Delay72, and Delay
+; uses WREG, PRODL, PRODH, TABLAT, TBLPTR
+;
+; Sends the character from WREG to 
+; the keyer.
+;
+SendChar:
+	MOVWF	PRODL		;save WREG
+	MOVLW	0x61
+	SUBWF	PRODL, 0
+	BN	SendChar1	;if it uppercase
+	MOVLW	0x20		
+	SUBWF	PRODL		;make it uppercase
+
+SendChar1:
+	MOVLW	0x20
+	SUBWF	PRODL, 0
+	BNZ	SendChar2	;if not a space
+	CALL	Delay72	;4 more dits
+	CALL	Delay24
+	RETURN
+
+SendChar2:
+	MOVLW	0x30
+	SUBWF	PRODL, 0
+	BC	SendChar3	;if "0" or greater
+	RETURN
+
+SendChar3:
+	MOVLW	0x3a
+	SUBWF	PRODL, 0
+	BC	SendChar4	;if not "0" -- "9"
+	CALL	LookUp
+	BRA	SendCharSend
+
+SendChar4:
+	MOVLW	0x41
+	SUBWF	PRODL, 0
+	BC	SendChar5	
+	RETURN			;if less than "A"
+
+SendChar5:
+	MOVLW	0x5b
+	SUBWF	PRODL, 0
+	BNC	SendChar6
+	RETURN			;if greater than "Z"
+
+SendChar6:
+	CALL	LookUp1
+
+SendCharSend:				
+	MOVWF	PRODL		;code to PRODH
+	MOVWF	PRODH		;count to PRODL
+	MOVLW	7
+	ANDWF	PRODL
+
+SendCharSend1:
+	CALL	KeyOn		;keyer on
+	RLCF	PRODH		;get dit or dah
+	BNC	SendCharSend2	;if dit
+	CALL	Delay72	;waste 3 dit times
+	BRA	SendCharSend3
+
+SendCharSend2:
+	CALL	Delay24	;waste 1 dit time
+
+SendCharSend3:
+	CALL	KeyOff		;keyer off
+	CALL	Delay24	;waste 1 dit time
+	DECF	PRODL	
+	BNZ	SendCharSend1	;if not done	
+	CALL	Delay24	;waste 2 more dit times
+	CALL	Delay24
+	RETURN
+;
+; Lookup code from Morse code table
+;
+; Code returned in WREG
+;
+LookUp:
+	MOVLW	0x30	
+	SUBWF	PRODL		;convert from ASCII
+	MOVLW	UPPER(Morse_N)
+	MOVWF	TBLPTRU
+	MOVLW	HIGH(Morse_N)
+	MOVWF	TBLPTRH
+	MOVLW  LOW(Morse_N)
+	MOVWF	TBLPTRL
+	BRA	LookUp2
+
+LookUp1:
+	MOVLW	0x41
+	SUBWF	PRODL
+	MOVLW	UPPER(Morse_L)
+	MOVWF	TBLPTRU
+	MOVLW	HIGH(Morse_L)
+	MOVWF	TBLPTRH
+	MOVLW  LOW(Morse_L)
+	MOVWF	TBLPTRL
+
+LookUp2:
+	MOVF	PRODL,0
+	ADDWF	TBLPTRL
+	MOVLW	0
+	ADDWFC	TBLPTRH
+	ADDWFC	TBLPTRU
+	TBLRD*			;lookup code
+	MOVF	TABLAT,0
+	RETURN
+;
+;  One dit time delay
+;
+Delay24:
+	MOVLW	.48		;48 times
+	MOVWF	TABLAT
+
+Delay24a:
+	CALL	Delay
+	DECFSZ	TABLAT
+	BRA	Delay24a
+	RETURN
+;
+;  Three dits time delay
+;
+Delay72:
+	CALL	Delay24
+	CALL	Delay24
+	CALL	Delay24
+	RETURN
+;
+;  500 microsecond time delay
+;
+Delay:				;165 times
+	MOVLW	.165		;500 microseconds
+Delay1:
+	DECFSZ	WREG
+	BRA	Delay1
+	RETURN
+;
+;  Bit 0 of Port B is set
+;
+KeyOn:
+	BSF	PORTB, 0	;set bit 0 of PortB
+	RETURN
+;
+;  Bot 0 of Port B is cleared
+;
+KeyOff:
+	BCF	PORTB, 0	;clear bit 0 of Port B
+	RETURN
+

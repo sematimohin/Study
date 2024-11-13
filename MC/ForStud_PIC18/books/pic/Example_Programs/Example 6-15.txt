@@ -1,0 +1,85 @@
+/*
+ * A high priority interrupt example
+ */
+
+#include <p18cxxx.h>
+
+/* Set configuration bits
+ *  - set RC oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = RC
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+void MyHighInt(void);		// prototypes for interrupts
+void MyLowInt(void);		//	service procedures
+
+#pragma interrupt MyHighInt	// MyHighInt is an interrupt
+#pragma code high_vector=0x08	// high_vector is the vector at 0x08
+
+void high_vector(void)
+{
+	_asm GOTO MyHighInt _endasm
+}
+
+#pragma interruptlow MyLowInt	// MyLowInt is an intettupt
+#pragma code low_vector=0x18	// low_vector is the vector at 0x18
+
+void low_vector(void)
+{
+	_asm GOTO MyLowInt _endasm
+}
+
+// data memory data
+
+int count;
+
+// high prioity interrupt
+
+#pragma code				// must be here
+
+void MyHighInt(void)
+{
+	count++;
+	INTCONbits.INT0IF = 0;  	// clear INT0IF flag
+}
+
+
+void MyLowInt(void)
+{
+	// low interrupt goes here
+}
+
+// main program
+
+void main (void)
+{
+
+	ADCON1 = 0x7F;		// make ports pins digital
+	
+	TRISB = 1;			// make RB0 input
+	
+	count = 0;			// start with count of 0
+	
+	RCONbits.IPEN = 0;		// IPEN = 0 (only high priority on)
+
+	INTCON2bits.INTEDG0 = 0;	// make INT0 negative edge triggered
+	INTCONbits.INT0IE = 1;	// enable INT0
+	INTCONbits.GIE = 1;		// enable interrupts
+	// do other initialization
+
+	while (1)
+	{
+
+		// do main program loop
+	
+	}
+}
+

@@ -1,0 +1,78 @@
+;**************** PutQ **********************
+;
+; uses 1 program stack level
+; uses 3 data stack levels addressed by FSR2
+;
+; Stores WREG into the queue
+;
+; C = 1 on return for a full queue
+;
+
+PutQ:
+	MOVFF	FSR0L, POSTDEC2	;stack FSR0 and WREG
+	MOVFF	FSR0H, POSTDEC2
+	MOVFF	WREG, POSTDEC2
+	MOVFF	QEntry, FSR0L
+	MOVLW	0
+	MOVWF	FSR0H
+	MOVF	POSTINC0, 0
+	MOVLW	Queue+.16
+	SUBWF	FSR0L, 0
+	BNZ	PutQ1
+	MOVLW	Queue
+	MOVFF	WREG, FSR0L
+PutQ1:
+	MOVF	QEntry, 0		;check queue full
+	SUBWF	FSR0L, 0
+	BNZ	PutQ2
+	SETF	STATUS, 0		;if full
+	MOVFF	PREINC2, WREG		;cleanup stack
+	BRA	PutQ3
+PutQ2
+	MOVF	QEntry, 0
+	MOVFF	FSR0L, QEntry
+	MOVFF	WREG, FSR0L
+	MOVFF	PREINC2, INDF0	;save queue data
+	CLRF	STATUS, 0
+PutQ3:
+	MOVFF	PREINC2, FSR0H	;un-load stack
+	MOVFF	PREINC2, FSR0L
+	RETURN
+
+
+;**************** GetQ **********************
+;
+; uses 1 program stack level
+; uses 3 data stack levels addressed by FSR2
+;
+; Retrieves WREG from the queue
+;
+; C = 1 on return for a empty queue
+;
+
+GetQ:
+	MOVF	QEntry, 0		;check if empty
+	SUBWF	QExit, 0
+	BNZ	GetQ1
+	SETF	STATUS, 0		;if empty
+	RETURN
+GetQ1:
+	MOVFF	FSR0L, POSTDEC2	;stack FSR0
+	MOVFF	FSR0H, POSTDEC2
+	
+	MOVFF	QExit, FSR0L
+	MOVLW	0
+	MOVWF	FSR0H
+	MOVFF	POSTINC0, POSTDEC2	;stack queue data
+	MOVFF	FSR0L, QExit
+	MOVLW	Queue+.16		;check boundary
+	SUBWF	FSR0L, 0
+	BNZ	GetQ2
+	MOVLW	Queue
+	MOVFF	WREG, QExit
+GetQ2:
+	MOVFF	PREINC2, WREG		;un-stack queue data and FSR0
+	MOVFF	PREINC2, FSR0H
+	MOVFF	PREINC2, FSR0L
+	CLRF	STATUS, 0
+	RETURN

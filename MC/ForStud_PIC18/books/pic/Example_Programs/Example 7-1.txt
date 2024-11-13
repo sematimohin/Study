@@ -1,0 +1,42 @@
+// >>> Don’t forget the #include <delays.h> statement <<<
+
+// ************************ Switch *******************************
+
+// to use this function, make sure that it is invoked as follows
+//
+//      Switch( 0x04 )    ? switch on bit 2 
+//
+//	   or
+//
+//	 Switch( 0x40 )    ? switch on bit 6  
+//
+//	   or
+//
+//	 Switch( 0x03 )    ? switches on bits 0 and 1 
+//
+
+// ********************** CONSTANTS ******************************
+
+#define KEYPORT PORTA	// change to match the actual port
+#define DELAY 15		// change as needed for time delay
+
+void Switch( char bit )
+{
+	do			// wait for release
+	{
+		while ( ( KEYPORT & bit ) != bit );
+		Delay1KTCYx(DELAY);
+		//  ClrWdt(); if needed
+	}
+while( ( KEYPORT & bit ) != bit );
+
+
+	do			// wait for press 
+	{
+		while ( ( KEYPORT & bit ) == bit );
+		Delay1KTCYx(DELAY);
+		// ClrWdt(); if needed
+	}
+while( ( KEYPORT & bit ) == bit );
+} 
+

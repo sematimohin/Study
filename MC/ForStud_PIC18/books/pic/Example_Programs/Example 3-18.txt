@@ -1,0 +1,37 @@
+;
+;*** Hexadecimal to ASCII function ***
+;
+;    Converts right nibble of WREG to ASCII returned in WREG
+;
+
+Hex2Ascii:
+		
+	ANDLW	0x0F		;clear high nibble
+
+	ADDLW	0x30		;convert to Ascii
+	DAW
+	BTFSC	WREG, 6
+
+	INCF	WREG
+
+	RETURN
+
+;
+;*** Main program ***
+;
+
+Main:
+	MOVLW	0x5c		;load test data
+		
+	MOVWF	Ascii_H
+	CALL	Hex2Ascii	;convert low nibble
+	MOVWF	Ascii_L	;store it at Ascii_L
+
+	MOVFF	Ascii_H, WREG
+	SWAPF	WREG		;get high nibble
+
+	CALL	Hex2Ascii	;convert it to ASCII
+	MOVWF	Ascii_H	;store it at Ascii_H
+
+Stop:	BRA Stop
+

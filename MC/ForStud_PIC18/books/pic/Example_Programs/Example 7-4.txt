@@ -1,0 +1,93 @@
+/*
+ * Turn signal example written for a PIC18F1220
+ * RC clock is 2 MHz
+ */
+
+#include <p18cxxx.h>
+#include <delays.h>
+
+/* Set configuration bits
+ *  - set RC oscillator
+ *  - enable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = RC
+#pragma config WDT = ON
+#pragma config WDTPS = 64		// 256 ms WDT
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+#pragma code
+
+// main program
+
+void main (void)
+{
+	#define DELAY 20	// define delay count of 20 (40 ms)
+
+	ADCON1 = 0x7F;	// Ports A and B are digital 
+	TRISA = 0;		// Port A is output
+	TRISB = 0xC0;		// Port B is output except for
+				// bit 6 and 7
+
+INTCON2bits.RBPU = 1;	// pull-ups on 
+
+	while	( 1 )		// main loop
+	{
+		ClrWdt();	// reset WDT
+
+		if ( ( PORTB & 0xC0 ) == 0 )	// if STOP
+		{	
+			PORTA = 0;	// all LEDs on
+			PORTB = 0; 
+		}
+		else if ( ( PORTB & 0x40 ) == 0x40 ) // if LEFT
+		{
+			PORTB = 0x10;		// ....X
+			Delay1KTCYx(DELAY);	
+			PORTB = 0x18;		// ...XX
+			Delay1KTCYx(DELAY);
+			PORTB = 0x1C;		// ..XXX
+			Delay1KTCYx(DELAY);	
+			PORTB = 0x1E;		// .XXXX
+			Delay1KTCYx(DELAY);
+			PORTB = 0x1F;		// XXXXX
+
+			while ( ( PORTB & 0xC0 ) != 0xC0  )
+			{
+				ClrWdt();	// reset WDT	
+				if ( ( PORTB & 0xC0 ) == 0 )  // if STOP
+					break;
+			}
+		}
+		else if ( ( PORTB & 0x80 ) == 0x80 )  // if RIGHT
+		{
+			PORTA = 0x10;		// X....
+			Delay1KTCYx(DELAY);
+			PORTA = 0x18;		// XX...
+			Delay1KTCYx(DELAY);
+			PORTA = 0x1C;		// XXX..
+			Delay1KTCYx(DELAY);	
+			PORTA = 0x1E;		// XXXX.
+			Delay1KTCYx(DELAY);
+			PORTA = 0x1F;		// XXXXX
+
+			while ( ( PORTB & 0xC0 ) != 0xC0  )
+			{
+				ClrWdt();	// reset WDT
+				if ( ( PORTB & 0xC0 ) == 0 )  // if STOP
+					break;
+			}
+		}
+		else  // if nothing
+		{
+			PORTA = 0xFF;		// all LEDs off
+			PORTB = 0xFF;
+		}
+		
+	}
+}

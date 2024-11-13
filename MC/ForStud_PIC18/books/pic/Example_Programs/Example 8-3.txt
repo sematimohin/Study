@@ -1,0 +1,256 @@
+/*
+ * The time and temperature example
+ */
+
+#include <p18cxxx.h>
+#include <timers.h>
+#include <delays.h>
+
+/* Set configuration bits
+ *  - set RC oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = HS
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+void MyHighInt(void);		// prototypes for the interrupt
+void MyLowInt(void);		// service procedures
+void timeTemp(void);
+int getTemp(void);
+
+#pragma interrupt MyHighInt	// MyHighInt is an interrupt
+#pragma code high_vector=0x08	// high_vector is at 0x0008
+
+void high_vector(void)		// the high prioity vector
+{
+	_asm GOTO MyHighInt _endasm	// goto high software
+}
+
+#pragma interruptlow MyLowInt	// MyLowInt is an interrupt
+#pragma code low_vector=0x18	// low vector is at 0x0018
+
+void low_vector(void)		// the low prioity vector
+{
+	_asm GOTO MyLowInt _endasm		// goto low software
+}
+// program memory data
+
+rom near char look7[] = // 7-segment lookup table
+{
+	0x3F,		// 0	active high signals
+	0x06,		// 1
+	0x5B,		// 2
+	0x4F,		// 3
+	0x66,		// 4
+	0x6D,		// 5
+	0x7D,		// 6
+	0x07,		// 7
+	0x7F,		// 8
+	0x6F		// 9
+};
+
+// data memory variables
+
+char tenths;				// time storage
+char seconds;
+char minutes;
+char hours;
+char displayRAM[8];			// display information
+char setTimeFlag;			// set time flag
+char select;				// display selection code
+char pointer;				// display pointer
+
+#pragma code				// start code here
+
+void MyHighInt(void)
+{	
+	INTCONbits.TMR0IF = 0;	// clear Timer 0 request
+	PORTB = select;
+	PORTC = displayRAM[pointer++];
+	select <<= 1;
+	if ( pointer == 8 )
+	{
+		pointer = 0;
+		select = 1;
+	}
+}
+
+void MyLowInt(void)
+{
+	PIR1bits.TMR1IF = 0;	// clear Timer 1 request
+	WriteTimer1( 53036 );	// reload count
+	tenths++;			// increment clock
+	if ( tenths == 10 )
+	{
+		tenths = 0;
+		seconds++;
+		if ( seconds == 60 )
+		{
+			seconds = 0;
+			minutes++;
+			if ( minutes == 60 )
+			{
+				minutes = 0;
+				hours++;
+				if ( hours == 13 )
+					hours = 1;
+			}
+		}
+	}
+	if ( ( tenths | seconds ) == 0 )  // once per minute
+		timeTemp();
+}
+
+void timeTemp(void)
+{
+	int temp;
+	if ( setTimeFlag == 0 )
+		displayRAM[4] = 0x71;	// F for temperature
+	displayRAM[0] = look7[minutes % 10];	
+	displayRAM[1] = look7[minutes / 10];
+	displayRAM[2] = look7[hours % 10];
+	displayRAM[3] = look7[hours / 10];
+	temp = getTemp();
+	displayRAM[7] = 0;
+	if ( temp < 0 )
+	{
+		temp = - temp;
+		displayRAM[7] = 0x40;
+	}
+	else 
+	if ( temp >= 100 )
+	{
+		temp -= 100;
+		displayRAM[7] = 6;
+	}
+	displayRAM[4] = look7[temp % 100];
+	displayRAM[5] = look7[temp / 10];		
+}
+
+void sendClock(void)
+{
+	PORTAbits.RA1 = 0;		// SC = 0
+	PORTAbits.RA1 = 1;		// SC = 1
+}
+
+int getTemp(void)
+{
+	int temp = 0;
+	char a;
+	PORTAbits.RA3 = 0;			// #CS = 0;
+	for ( a = 0; a < 16; a++ )		// get 16-bits
+	{
+		temp <<= 1;
+		temp |= PORTAbits.RA2 >> 1;	
+		sendClock();
+	}
+	a = 0;
+	if ( ( temp & 0x8000 ) == 0x8000 )	// check sign
+	{
+		a = 1;
+		temp = -temp;			// make positive
+	}
+	temp >>= 7;
+	if ( STATUSbits.C = 1 )		// round result
+		temp++;
+	temp = ( 9 * temp ) / 5 + 32;	// make Fahrenheit 
+	if ( a )
+		temp = -temp;
+	PORTAbits.RA3 = 1;			// #CS = 1
+	return temp;				// return with temperature
+}
+
+int Switch(void)
+{
+	int delay = 1500;		// for a 3 second delay
+	do				// wait for release
+	{
+		while ( ( PORTA & 1 ) != 1 );
+		Delay1KTCYx(15);
+
+	}while( ( PORTA & 1 ) != 1 );
+
+	do				// wait for press 
+	{
+		while ( ( PORTA & 1 ) == 1 )
+		{
+			Delay1KTCYx(2);
+			delay--;
+			if ( delay == 0 )
+				return 1;	// if timed out
+		}
+		Delay1KTCYx(15);
+
+	}while( ( PORTA & 1 ) == 1 );
+	return 0;			// if pushbutton pressed
+} 
+
+// main program
+
+void main (void)
+{
+	ADCON1 = 0x7F;		// all digital
+	TRISA = 0x05;			// program Port A
+	TRISB = 0;			// program Port B
+	TRISC = 0;			// program Port C
+	PORTB = 0;			// all displays off
+	PORTA = 0x0A;			// #CS and SC = 1
+
+	tenths = seconds = minutes = setTimeFlag = pointer = 0;
+	select = 1;
+	hours = 12;
+	
+	timeTemp();			// initialize display
+
+	INTCON2bits.TMR0IP = 1; 	// Timer 0 is high priority
+	IPR1bits.TMR1IP = 0;	// Timer 1 is low priority
+
+	WriteTimer0( 0 );
+	OpenTimer0( TIMER_INT_ON &	 // every 1024 us
+			T0_8BIT &
+			T0_SOURCE_INT &
+			T0_PS_1_4 );
+	
+	WriteTimer1( 53036 );	// every 100 ms
+	OpenTimer1( TIMER_INT_ON &
+			T1_8BIT_RW &
+			T1_SOURCE_INT &
+			T1_PS_1_8 );
+				
+	RCONbits.IPEN = 1;		// IPEN = 1 to enable priority interrupts
+	INTCONbits.GIEH = 1;	// enable high priority interrupt
+	INTCONbits.GIEL = 1;	// enable low priority interrupt
+
+	while ( 1 )			// main loop
+	{
+		while ( Switch() == 1 );   // wait for switch press					setTimeFlag = 1;		// do not display F
+		displayRAM[4] = 0x76;	// display H
+		timeTemp();
+		while ( Switch () == 0 )
+		{
+			hours++;
+			if ( hours == 13 )
+				hours = 1;
+			timeTemp();
+		}
+		displayRAM[4] = 0x6D;	// display S
+		timeTemp();
+		while ( Switch () == 0 )
+		{
+			minutes++;
+			if ( minutes == 60 )
+				minutes = 0;
+			timeTemp();
+		}
+		setTimeFlag = 0;
+		timeTemp();
+	}
+}
+

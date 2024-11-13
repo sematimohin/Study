@@ -1,0 +1,67 @@
+;******************* MUL16 Function ********************
+;
+; uses 2 program stack levels
+; uses WREG, FSR0, FSR1, FSR2, TABLAT, PRODL, and PRODH
+; uses functions Add32 and Shift
+;
+; Multiplies contents of FSR1 location times contents of 
+;	FSR0 location, stored result at location FSR2
+;	16-bit times 16-bits ? 32-bit result
+;
+
+MUL16:
+	MOVLW	3
+MUL16a:
+	CLRF	PLUSW2		;clear product
+	DECF	WREG
+	BNN	MUL16a
+	MOVLW	3
+	CLRF	PLUSW1		;clear left 2 bytes of multiplicand
+	MOVLW	2
+	CLRF	PLUSW1
+
+MUL16b:
+	MOVLW	1
+	RRCF	PLUSW0		;shift multiplier right
+	RRCF	INDF0	
+	BNC	MUL16c		;if no carry
+	CALL	Add32		;add multiplicand to product
+
+MUL16c:
+	CALL	Shift		;shift multiplicand left
+	MOVF	PLUSW0, 0
+	IORWF	INDF0, 0
+	BNZ	MUL16b		;if multiplier is not zero
+	RETURN
+
+;*************** Add32 Function ********************
+
+Add32:
+	MOVFF	FSR2L, PRODH
+	MOVFF	FSR1L, PRODL
+	BCF	STATUS, 0
+	MOVLW	4
+	MOVWF	TABLAT
+
+Add32a:
+	MOVF	POSTINC1, 0
+	ADDWFC	POSTINC2
+	DECFSZ	TABLAT
+	BRA	Add32a
+	MOVFF	PRODH, FSR2L
+	MOVFF	PRODL, FSR1L
+	RETURN
+
+;**************** Shift Function *************
+
+Shift:
+	MOVFF	FSR1L, PRODH
+	BCF	STATUS, 0
+	MOVLW	4
+
+Shift1:
+	RLCF	POSTINC1
+	DECFSZ	WREG
+	BRA	Shift1
+	MOVFF	PRODH, FSR1L
+	RETURN

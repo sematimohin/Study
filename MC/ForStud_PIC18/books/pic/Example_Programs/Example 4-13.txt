@@ -1,0 +1,39 @@
+;************** ASCIInull ****************
+;
+; uses 1 program stack level
+; uses FSR0, FSR1, WREG, TABLAT
+;
+; Reverses the order of a string of characters
+; and converts them to a ASCII null string
+;
+
+ASCIInull:
+	MOVFF	FSR0L, FSR1L
+	MOVFF	FSR0H, FSR1H
+
+ASCIInulla:
+	MOVLW	0x30		;to ASCII
+	ADDWF	INDF0
+	MOVLW	0x40
+	CPFSEQ	POSTINC0
+	BRA	ASCIInulla	;if not end
+
+	DECF	FSR0L
+	MOVLW	0
+	SUBWFB	FSR0H
+	MOVWF	POSTDEC0
+
+ASCIInullb:
+	MOVFF	INDF0, TABLAT	;swap data
+	MOVF	INDF1, 0
+	MOVWF	POSTDEC0
+	MOVFF	TABLAT, POSTINC1
+	MOVF	FSR0H, 0
+	CPFSEQ	FSR1H, 0
+	BRA	ASCIInullb	;if not end
+
+	MOVF	FSR0L, 0
+	CPFSEQ	FSR1L, 0
+	BRA	ASCIInullb	;if not end
+
+	RETURN	

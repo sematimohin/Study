@@ -1,0 +1,696 @@
+/*
+ * Traffic light controller
+ */
+
+#include <p18cxxx.h>
+#include <delays.h>
+#include <timers.h>
+#include <usart.h>
+
+/* Set configuration bits
+ *  - set internal oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = INTIO2
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+// ********* DATA MEMORY VARIABLES ************
+
+void MyHighInt(void);		// prototypes for interrupt
+void MyLowInt(void);		// service procedures
+
+#pragma interrupt MyHighInt	// MyHighInt is an interrupt
+#pragma code high_vector=0x08	// high_vector is the vector at 0x08
+
+void high_vector(void)
+{
+	_asm GOTO MyHighInt _endasm
+}
+
+#pragma interruptlow MyLowInt	// MyLowInt is an interrupt
+#pragma code low_vector=0x18	// low vector is at 0x0018
+
+void low_vector(void)		// the low prioity vector
+{
+	_asm GOTO MyLowInt _endasm		// goto low software
+}
+
+//
+// data EEPROM variable
+//
+
+#define BlinkStartHours 0
+#define BlinkStartMinutes 1 
+#define BlinkStopHours 2
+#define BlinkStopMinutes 3
+#define EWYellowTime 4
+#define NSGreenTime 5
+#define NSYellowTime 6
+#define EWGreenTime 7
+
+//
+// Program memory data
+//
+
+rom near char lookupKey[] = 
+{
+	1, 4, 7, 10,		// left column
+	2, 5, 8, 0,		// middle column
+	3, 6, 9, 11		// right column
+};
+
+rom near char str1[] = "Ready to control";
+rom near char str2[] = "  the traffic!  ";
+rom near char str3[] = "                ";
+rom near char str4[] = " Enter the time ";
+rom near char str5[] = "Set blink start ";
+rom near char str6[] = "Set blink stop  ";
+rom near char str7[] = " Set EW yellow  ";
+rom near char str8[] = "  Set EW green  ";
+rom near char str9[] = " Set NS yellow  ";
+rom near char str10[] = "  Set NS green  ";
+rom near char str11[] = "The current Time";
+rom near char str12[] = "   Blink Start  ";
+rom near char str13[] = "   BlinK Stop   ";
+rom near char str14[] = "    EW Yellow   ";
+rom near char str15[] = "    EW Green    ";
+rom near char str16[] = "    NS Yellow   ";
+rom near char str17[] = "    NS Green    ";
+rom near char str18[] = "Enter a command ";
+rom near char str19[] = "     1 -- 8     "; 
+                            
+//
+// data memory variables
+//
+
+#pragma udata
+
+char transmitQueue[16];
+char receiverQueue[16];
+char inTrans;
+char outTrans;
+char inRecv;
+char outRecv;
+char seconds;
+char minutes;
+char hours;
+char NSGreen;
+char EWGreen;
+char state;
+char buffer[4];
+int ptr;
+
+
+#pragma code
+
+// Interrupt service procedure
+//	occurs each second
+//
+
+// Reads a data EEPROM location from address
+
+char eeRead(char address)
+{
+	EECON1bits.EEPGD = 0;
+	EEADR = address;
+	EECON1bits.RD = 1;
+	return EEDATA;
+}
+
+// Write a data EEPROM location at address with data
+
+void eeWrite(char address, char data)
+{
+	INTCONbits.GIEH = 0;	
+	INTCONbits.GIEL = 0;	
+	EECON1bits.EEPGD = 0;	
+	EECON1bits.WREN = 1;
+	EEADR = address;
+	EEDATA = data;
+	EECON2 = 0x55;
+	EECON2 = 0xAA;
+	EECON1bits.WR = 1;
+	while ( PIR2bits.EEIF == 0 );
+	PIR2bits.EEIF = 0;	
+	EECON1bits.WREN = 0;
+	INTCONbits.GIEH = 1;	
+	INTCONbits.GIEL = 1;	
+}
+
+void sendLCDdata(char data, char rs)
+{
+	PORTC = data >> 4;		// send left nibble
+	PORTCbits.RC5 = rs;		// control RS
+	PORTCbits.RC4 = 1;		// pulse E
+	PORTCbits.RC4 = 0;
+	Delay1TCY();		// delay 48 us
+	Delay1TCY();
+	Delay1TCY(); 
+	PORTC = data & 0x0F;	// send right nibble
+	PORTCbits.RC5 = rs;		// control RS
+	PORTCbits.RC4 = 1;		// pulse E
+	PORTCbits.RC4 = 0; 	
+	Delay1TCY();		// delay 48 us
+	Delay1TCY();
+	Delay1TCY();
+	PORTC = 0; 
+}
+
+void initLCD(void)
+{
+	int a;
+	Delay1KTCYx(2); 		// wait 32 ms 
+	for ( a = 0; a < 4; a++ )
+	{
+		sendLCDdata(0x30, 0);	// send 0x30
+		Delay1KTCYx(1);		// wait 16 ms
+	}
+
+	sendLCDdata(0x08, 0);	// send 0x08
+	sendLCDdata(0x01, 0);	// send 0x01
+	Delay1KTCYx(1);		// wait 16 ms
+	sendLCDdata(0x0C, 0);	// send 0x0C
+	sendLCDdata(0x06, 0);	// send 0x06
+}
+
+// Display a program memory based string (str) at position
+// 	Line 1 is at positions 0x80 through 0xA7
+//	Line 2 is ay positions 0xC0 through 0xE7
+
+// Display a program memory based string (str) at position
+
+void DisplayStringPgm( char position, rom char *str )
+{
+	char ptr = 0;
+	sendLCDdata(position, 0);	// send position
+	while ( str[ptr] != 0 )
+		sendLCDdata(str[ptr++], 1);	// send character
+}
+
+void getNumb(char count, char temp)
+{
+	if ( ptr < count )
+	{
+		if ( temp >= 0 && temp <= 9 )
+		{
+			sendLCDdata( 0xC6 + ptr, 0 );
+			sendLCDdata( temp + 0x30, 1 );
+			buffer[ptr++] = temp;
+		}
+		else if ( temp == 10 )  //backspace (*)
+		{
+			if ( ptr != 0 )
+				ptr--;
+			sendLCDdata( 0xC6 + ptr, 0 );
+			sendLCDdata(' ', 1);
+		}
+	}
+}
+
+void Disp3(char temp)
+{
+	sendLCDdata( temp / 100 + 0x30, 1 );
+	temp %= 100;
+	sendLCDdata( temp / 10 + 0x30, 1 );
+	sendLCDdata( temp % 10 + 0x30, 1 );
+}
+
+void Disp4(char first, char second)
+{
+	sendLCDdata( first / 10 + 0x30, 1);
+	sendLCDdata( first % 10 + 0x30, 1);
+	sendLCDdata( ':', 1 );
+	sendLCDdata( second / 10 + 0x30, 1);
+	sendLCDdata( second % 10 + 0x30, 1);
+}
+
+int outTransQueue(void)
+{
+	int temp;
+	if ( inTrans == outTrans )
+		return 0x100;		// if empty
+	temp = transmitQueue[outTrans];	// get data
+	outTrans = ( outTrans + 1 ) & 0x0F;
+	return temp;
+}
+
+int inTransQueue(char data)
+{
+	if ( outTrans == ( ( inTrans + 1 ) & 0x0F ) )
+		return 0x100;		// if full
+	transmitQueue[inTrans] = data;
+	inTrans = ( inTrans + 1 ) & 0x0F;
+	PIE1bits.TXIE = 1;		// transmitter on
+	return 0;
+}
+
+int outRecvQueue(void)
+{
+	int temp;
+	if ( inRecv == outRecv )
+		return 0x100;		// if empty
+	temp = receiverQueue[outRecv];	// get data
+	outRecv = ( outRecv + 1 ) & 0x0F;
+	return temp;
+}
+
+int inRecvQueue(char data)
+{
+	if ( outRecv == ( ( inRecv + 1 ) & 0x0F ) )
+		return 0x100;		// if full
+	receiverQueue[inRecv] = data;
+	inRecv = ( inRecv + 1 ) & 0x0F;
+	return 0;
+}
+
+void MyHighInt(void)
+{
+	char a, temp;
+	if ( INTCONbits.INT0IF == 1 )
+	{
+		INTCONbits.INT0IF = 0;  	// clear INT0IF flag
+		if ( NSGreen > 10 )
+			NSGreen = 10;
+	}
+	else if ( INTCON3bits.INT1IF == 1 )
+	{
+		INTCON3bits.INT1IF = 0;
+		if ( EWGreen > 10 )
+			EWGreen = 10;
+	}
+	else if ( INTCONbits.RBIF == 1 )
+	{
+		Delay1KTCYx(1);
+		temp = 0;
+		if ( PORTB & 0xF0 != 0xF0 )	//good key
+		{
+			PORTC = 0xEF;			// select a leftmost column
+			while ( ( PORTB & 0xF0 ) == 0xF0 )  // no key is found
+			{
+				PORTC = (PORTC << 1) | 1;	// get next column 
+				temp += 4;		// add rows to keycode
+			}
+			for ( a = 0x10; a != 0; a <<= 1)
+			{					// find row
+				if ( ( PORTB & a ) == 0 )
+					break;
+				temp++;
+			}
+			temp = lookupKey[temp];
+			switch ( state )
+			{
+			case 0:
+				{
+					if ( temp == 10 )	// any command
+					DisplayStringPgm( 0x80, str18 );
+					DisplayStringPgm( 0xC0, str19 );
+					state = 1;
+					break;
+				}
+			case 1:
+				{
+					if ( temp >= 1 && temp <= 8 )
+					{
+						ptr = 0;
+						DisplayStringPgm( 0x80, str4 + 
+							( state - 1 )* 17 );
+						DisplayStringPgm( 0xC0, str3 );
+						state = temp + 1;
+					}
+					else
+					{
+						DisplayStringPgm(0x80, str1);
+						DisplayStringPgm(0xC0, str2);
+						state = 0;
+					}
+					break;
+				}
+			case 2:		// "Set Current Time" (*1 command)
+				{
+					getNumb(4, temp);
+					if ( temp == 11 )	// # is enter
+					{
+						hours = buffer[0] * 10 + buffer[1];
+						minutes = buffer[2] * 10 + buffer[3];
+						DisplayStringPgm(0x80, str1);
+						DisplayStringPgm(0xC0, str2);
+						state = 0;						 
+					}
+					break;
+				}
+			case 3:		// "Set Blink Start" (*2 command)
+				{
+					getNumb(4, temp);
+					if ( temp == 11 )
+					{
+						eeWrite( BlinkStartHours, buffer[0] * 								10 + buffer[1] );
+						eeWrite( BlinkStartMinutes, buffer[2] * 							10 + buffer[3] );
+						DisplayStringPgm(0x80, str1);
+						DisplayStringPgm(0xC0, str2);
+						state = 0;						
+					}
+					break;
+				}
+			case 4:		// "Set Blink Stop" (*3 command)
+				{
+					getNumb(4, temp);
+					if ( temp == 11 )
+					{
+						eeWrite( BlinkStopHours, buffer[0] * 
+							10 + buffer[1] );
+						eeWrite( BlinkStopMinutes, buffer[2] * 								10 + buffer[3] );
+						DisplayStringPgm(0x80, str1);
+						DisplayStringPgm(0xC0, str2);
+						state = 0;						
+					}
+					break;
+				}
+			case 5:		// "Set EW Yellow" (*4 command)
+				{
+					getNumb(3, temp);
+					if ( temp == 11 )
+					{
+						if ( buffer[0] * 100 + buffer[1] * 
+							10 + buffer[2] > 255 )
+						{
+							buffer[0] = 2;
+							buffer[1] = buffer[2] = 5;
+						}
+						eeWrite( EWYellowTime, buffer[0] * 
+							100 + buffer[1] * 
+							10 + buffer[1] );
+						DisplayStringPgm(0x80, str1);
+						DisplayStringPgm(0xC0, str2);
+						state = 0;									
+					}
+					break;
+				}
+			case 6:		// "Set EW Green" (*5 command)
+				{
+					getNumb(3, temp);
+					if ( temp == 11 )
+					{
+						if ( buffer[0] * 100 + buffer[1] * 
+							10 + buffer[2] > 255 )
+						{
+							buffer[0] = 2;
+							buffer[1] = buffer[2] = 5;
+						}
+						eeWrite( EWGreenTime, buffer[0] * 
+							100 + buffer[1] * 
+							10 + buffer[1] );
+						DisplayStringPgm(0x80, str1);
+						DisplayStringPgm(0xC0, str2);
+						state = 0;									
+					}
+					break;
+				}
+			case 7:		// "Set NS Yellow" (*6 command)
+				{
+					getNumb(3, temp);
+					if ( temp == 11 )
+					{
+						if ( buffer[0] * 100 + buffer[1] 
+							* 10 + buffer[2] > 255 )
+						{
+							buffer[0] = 2;
+							buffer[1] = buffer[2] = 5;
+						}
+						eeWrite( NSYellowTime, buffer[0] * 
+							100 + buffer[1] * 
+							10 + buffer[1] );
+						DisplayStringPgm(0x80, str1);
+						DisplayStringPgm(0xC0, str2);
+						state = 0;									
+					}
+					break;
+				}
+			case 8:		// "Set NS Green" (*7 command)
+				{
+					getNumb(3, temp);
+					if ( temp == 11 )
+					{
+						if ( buffer[0] * 100 + buffer[1] * 
+							10 + buffer[2] > 255 )
+						{
+							buffer[0] = 2;
+							buffer[1] = buffer[2] = 5;
+						}
+						eeWrite( NSGreenTime, buffer[0] * 
+							100 + buffer[1] * 
+							10 + buffer[1] );
+						DisplayStringPgm(0x80, str1);
+						DisplayStringPgm(0xC0, str2);
+						state = 0;									
+					}
+					break;
+				}
+			case 9:		// "Display all" (*8 command)
+				{
+					DisplayStringPgm( 0x80, str11 + ptr * 17 );
+					DisplayStringPgm( 0xC0, str3 );
+					sendLCDdata( 0xC5, 0 );
+					if ( ptr == 0 )
+						Disp4( hours, minutes );
+					else if ( ptr == 1 )
+						Disp4( eeRead(BlinkStartHours),
+							eeRead(BlinkStartMinutes) );
+					else if ( ptr == 2 )
+						Disp4( eeRead(BlinkStopHours),
+							eeRead(BlinkStopMinutes) );
+					else if ( ptr == 3 )
+						Disp3( eeRead(EWYellowTime) );
+					else if ( ptr == 4 )
+						Disp3( eeRead(EWGreenTime) );
+					else if ( ptr == 5 )
+						Disp3( eeRead(NSYellowTime) );
+					else if ( ptr == 6 )
+						Disp3( eeRead(NSGreenTime) );
+					ptr++;
+					if ( ptr == 7 )
+						state = 10;						
+					break;
+				}
+			case 10:
+				{
+					DisplayStringPgm(0x80, str1);
+					DisplayStringPgm(0xC0, str2);
+					state = 0;									
+					break;
+				}
+			}
+		}
+		PORTC = 0;
+		temp = PORTB;			// must read PORTB to clear change
+		INTCONbits.RBIF = 0;	// clear interrupt
+	}
+}
+
+void MyLowInt(void)
+{
+	int temp;
+	if (PIR1bits.TMR1IF == 1 )	// do clock
+	{							// as 24 hour clock
+		PIR1bits.TMR1IF = 0;
+		WriteTimer1( -15625 );
+		seconds++;
+		if ( seconds == 60 )
+		{
+			seconds = 0;
+			minutes++;
+			if ( minutes == 60 )
+			{
+				minutes = 0;
+				hours++;
+				if ( hours == 24 )
+					hours = 0;
+			}
+		}	
+	}
+	else if ( PIR1bits.RCIF == 1 )
+	{
+		PIR1bits.RCIF = 0;		// clear interrupt
+		inRecvQueue( RCREG );	// store received data in queue
+	}
+	else if ( PIR1bits.TXIF == 1 )
+	{
+		PIR1bits.TXIF = 0;		// clear interrupt
+		temp = outTransQueue();
+		if ( temp == 0x100 )
+			PIE1bits.TXIE = 0;	// transmitter off
+		else
+			TXREG = temp;		// send data
+	}
+}
+
+char HalfSecond(char count)
+{
+	int a, temp;
+	for ( a = 0; a < count; a++ )
+	{
+		temp = outRecvQueue();
+		if ( temp != 0x100 && 
+			PORTDbits.RD7 == 0  &&	// if a slave
+			( ( PORTD & 0xF0 ) >> 4 ) == ( temp & 7 ) &&
+			temp & 0xF7 == 0 )
+				return 1;
+		Delay1KTCYx(31);
+		Delay10TCYx(25);	
+	}
+	return 0;
+}
+
+void DoLights(void)
+{
+	if ( ( hours >= eeRead(BlinkStartHours) &&	// blink
+		 hours <= eeRead(BlinkStopHours) ) && (
+		 minutes >= eeRead(BlinkStartMinutes) &&
+		 minutes <= eeRead(BlinkStopMinutes) ) )
+	{
+			PORTAbits.RA1 = 1;	// ns yellow
+			PORTAbits.RA5 = 1;	// ew green
+			PORTDbits.RD1 = 1;	// NS stop
+			PORTDbits.RD3 = 1; 	// EW stop
+			HalfSecond(1);		// wait 1/2 sec
+			PORTAbits.RA1 = 0;
+			PORTAbits.RA5 = 0;
+			PORTDbits.RD1 = 0;
+			PORTDbits.RD3 = 0;
+			HalfSecond(1);
+	}
+	else						// normal cycle
+	{
+		do 		// do synchronize
+		{
+		do
+		{
+		do 
+		{
+		do 
+		{
+		do
+		{
+		do
+		{	NSGreen = eeRead(NSGreenTime);
+			EWGreen = eeRead(EWGreenTime);
+			PORTAbits.RA4 = 1;		// ew yellow
+			PORTAbits.RA5 = 0;
+		}
+		while ( HalfSecond(eeRead(EWYellowTime)) == 1 );
+			PORTAbits.RA4 = 0;
+			PORTAbits.RA3 = 1;		// ew red
+			PORTAbits.RA0 = 0;
+			PORTAbits.RA2 = 1;		// ns green
+			PORTDbits.RD2 = 1;		// ew walk
+			PORTDbits.RD1 = 1;		// ns stop
+		}
+		while ( HalfSecond(eeRead(NSGreen/2)) == 1 );
+			PORTDbits.RD2 = 0;
+			PORTDbits.RD3 = 1;
+		}
+		while ( HalfSecond(eeRead(NSGreen/2)) == 1 );
+			PORTAbits.RA1 = 1;		// ns yellow
+			PORTAbits.RA2 = 0;
+		}
+		while ( HalfSecond(eeRead(NSYellowTime)) == 1 );
+			PORTAbits.RA1 = 0;
+			PORTAbits.RA0 = 1;		// ns red
+			PORTAbits.RA5 = 1;		// ew green
+			PORTAbits.RA3 = 0;
+			PORTDbits.RD3 = 1;		// ew stop
+			PORTDbits.RD0 = 1;		// ns walk
+		}
+		while ( HalfSecond(eeRead(EWGreen/2)) == 1 );
+			PORTDbits.RD0 = 0;
+			PORTDbits.RD1 = 1;
+		}
+		while ( HalfSecond(eeRead(EWGreen/2)) == 1 );
+		}
+	}
+}
+
+void main (void)
+{
+	int a;
+	OSCCON = 0x22;		// 250 KHz internal clock
+	ADCON1 = 0x7F;		// all inputs are digital
+	TRISA = 0;			// Port A all outputs
+	TRISB = 0xFF;		// Port B all inputs
+	TRISC = 0x80;		// Port C all outputs except RC7
+	TRISD = 0xF0;		// Port D 0-3 out, 4-7 in
+	TRISE = 0;			// Port E all outputs
+	
+	if ( PORTDbits.RD7 == 0 )
+		PORTEbits.RE1 = 0;	// slave
+	else 
+		PORTEbits.RE1 = 1;	// master
+
+	PORTA = 0;			// all lights off
+	PORTC = 0;
+	PORTD = 0;
+	state = 0;
+	
+	initLCD();
+	DisplayStringPgm(0x80, str1);
+	DisplayStringPgm(0xC0, str2);
+
+	INTCON2bits.RBPU = 0;	// Port B pullups on
+
+	OpenTimer1( TIMER_INT_ON &
+		T1_8BIT_RW &
+		T1_SOURCE_INT &
+		T1_PS_1_4 );
+
+	WriteTimer1( -15625 );	// every second
+
+
+	IPR1bits.TMR1IP = 0;	// Timer 1 low priority	
+	PIE1bits.TMR1IE = 1;	// Timer 1 interrupt on
+
+	INTCON3bits.INT1IP = 1;	// INT1 is high priority
+	INTCON3bits.INT1IE = 1;	// enable INT1
+	
+	INTCON2bits.INTEDG0 = 0;	// make INT0 negative edge triggered
+	INTCONbits.INT0IE = 1;	// enable INT0
+
+	INTCON2bits.RBIP = 0;	// low priority
+	INTCONbits.RBIE = 1;	// enable bit change interrupt
+
+	IPR1bits.TXIP = 0;		// select low priority
+	IPR1bits.RCIP = 0;		//   for USART
+
+	OpenUSART(USART_TX_INT_ON &	//USART operates at 1200 Baud
+			USART_RX_INT_ON &
+			USART_ASYNCH_MODE &
+			USART_EIGHT_BIT &
+			USART_CONT_RX &
+			USART_BRGH_HIGH,
+			3 );
+
+	inRecv = outRecv = inTrans = outTrans = 0;
+
+	RCONbits.IPEN = 1;		// Both priority interrupt on
+	INTCONbits.GIEH = 1;	// Enable interrupts
+	INTCONbits.GIEL = 1;
+	
+	// Synchronize all slaves
+	//
+	for ( a = 0; a < 8; a++ )
+	{
+		while ( inTransQueue( a ) == 0x100 );	// send address
+				// all slaves are sent 0000 0aaa to synchronixe
+				// them so they all cycle in sync
+				// the 0000 0 is the sync command
+	}
+	while (1)
+	{
+		DoLights();
+	}
+}

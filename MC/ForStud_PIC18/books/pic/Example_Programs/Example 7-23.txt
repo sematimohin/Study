@@ -1,0 +1,82 @@
+/*
+ * Remote control range extender
+ */
+
+#include <p18cxxx.h>
+
+/* Set configuration bits
+ *  - set internal oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = INTIO2
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+// ********* DATA MEMORY VARIABLES ************
+
+void MyHighInt(void);		// prototypes for interrupts
+
+#pragma interrupt MyHighInt	// MyHighInt is an interrupt
+#pragma code high_vector=0x08	// high_vector is the vector at 0x08
+
+void high_vector(void)
+{
+	_asm GOTO MyHighInt _endasm
+}
+
+#pragma code
+
+// Interrupt service procedure
+//	occurs for any positive edge on INT1 (RB1)
+//
+
+void MyHighInt(void)
+{
+INTCON3bits.INT1IF = 0;	// clear interrupt request
+	char state = PORTBbits.RB1;
+	T2CONbits.TMR2ON = 1;	// start 36 KHz output
+	
+do
+	{
+		TMR0L = 0;		// clear Timer 0
+		while( state == PORTBbits.RB1 &&
+			TMR0L < 20 );	// wait for change or time out
+		state = PORTBbits.RB1;
+	}
+while ( TMR0L < 20 );
+
+	T2CONbits.TMR2ON = 0;	// 36 KHz turned off	 
+}
+
+void main (void)
+{
+	OSCCON = 0x63			// setup internal oscillator 4 MHz
+	ADCON1 = 0x7F;		// ports are digital
+	TRISB = 2;			// program ports
+	PORTB = 0;
+
+	T2CON = 0;			// select a prescaler of 1
+	CCP1CON = 0x0C;		// CCP module off, active high output
+	TMR2 = 0;			// clear Timer 2
+	PR2 = 26;			// Timer 2 clears on 10;
+	CCPR1L = 14;			// set for square wave (50% duty cycle)
+
+	T0CON = 0xC8;			// Timer 0 counts in µs
+
+	RCONbits.IPEN = 0;		// only high priority interrupt on
+	
+	INTCON2bits.INTEDG1 = 1;	// make INT1 positive edge-triggered
+	INTCON3bits.INT1IE = 1;	// enable INT1
+	INTCONbits.GIE = 1;		// enable interrupts
+
+	while (1)
+	{
+		Sleep();		// just go to sleep
+	}
+}

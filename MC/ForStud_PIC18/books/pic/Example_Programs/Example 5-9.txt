@@ -1,0 +1,45 @@
+/*
+ * This is Example 5-9 
+ */
+
+#include <p18cxxx.h>
+ 
+/* Set configuration bits
+ *  - set HS oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ */
+
+#pragma config OSC = HS
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+
+// program memory data
+
+rom near char lookUp7Seg[] = 	// 7-segment lookup table
+{ 	
+	0x3f, 0x06, 0x5b, 0x4f, 0x66,
+	0x6d, 0x7d, 7, 0x7f, 0x6f
+};
+
+// data memory 
+
+char data1;
+
+// function Get7Seg
+
+char Get7Seg(char bcd)
+{
+	if ( bcd <= 9 )
+		return lookUp7Seg[bcd];
+	else
+		return 0;
+}
+
+// main program
+
+void main (void)
+{
+	data1 = Get7Seg(3);
+}
+

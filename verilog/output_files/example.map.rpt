@@ -1,0 +1,261 @@
+Analysis & Synthesis report for example
+Sat Oct 05 13:04:53 2024
+Quartus Prime Version 20.1.1 Build 720 11/11/2020 SJ Lite Edition
+
+
+---------------------
+; Table of Contents ;
+---------------------
+  1. Legal Notice
+  2. Analysis & Synthesis Summary
+  3. Analysis & Synthesis Settings
+  4. Parallel Compilation
+  5. Analysis & Synthesis Messages
+
+
+
+----------------
+; Legal Notice ;
+----------------
+Copyright (C) 2020  Intel Corporation. All rights reserved.
+Your use of Intel Corporation's design tools, logic functions 
+and other software and tools, and any partner logic 
+functions, and any output files from any of the foregoing 
+(including device programming or simulation files), and any 
+associated documentation or information are expressly subject 
+to the terms and conditions of the Intel Program License 
+Subscription Agreement, the Intel Quartus Prime License Agreement,
+the Intel FPGA IP License Agreement, or other applicable license
+agreement, including, without limitation, that your use is for
+the sole purpose of programming logic devices manufactured by
+Intel and sold by Intel or its authorized distributors.  Please
+refer to the applicable agreement for further details, at
+https://fpgasoftware.intel.com/eula.
+
+
+
++----------------------------------------------------------------------------------+
+; Analysis & Synthesis Summary                                                     ;
++------------------------------------+---------------------------------------------+
+; Analysis & Synthesis Status        ; Failed - Sat Oct 05 13:04:52 2024           ;
+; Quartus Prime Version              ; 20.1.1 Build 720 11/11/2020 SJ Lite Edition ;
+; Revision Name                      ; example                                     ;
+; Top-level Entity Name              ; example                                     ;
+; Family                             ; Cyclone IV E                                ;
+; Total logic elements               ; N/A until Partition Merge                   ;
+;     Total combinational functions  ; N/A until Partition Merge                   ;
+;     Dedicated logic registers      ; N/A until Partition Merge                   ;
+; Total registers                    ; N/A until Partition Merge                   ;
+; Total pins                         ; N/A until Partition Merge                   ;
+; Total virtual pins                 ; N/A until Partition Merge                   ;
+; Total memory bits                  ; N/A until Partition Merge                   ;
+; Embedded Multiplier 9-bit elements ; N/A until Partition Merge                   ;
+; Total PLLs                         ; N/A until Partition Merge                   ;
++------------------------------------+---------------------------------------------+
+
+
++------------------------------------------------------------------------------------------------------------+
+; Analysis & Synthesis Settings                                                                              ;
++------------------------------------------------------------------+--------------------+--------------------+
+; Option                                                           ; Setting            ; Default Value      ;
++------------------------------------------------------------------+--------------------+--------------------+
+; Device                                                           ; EP4CE6E22A7        ;                    ;
+; Top-level entity name                                            ; example            ; example            ;
+; Family name                                                      ; Cyclone IV E       ; Cyclone V          ;
+; Use smart compilation                                            ; Off                ; Off                ;
+; Enable parallel Assembler and Timing Analyzer during compilation ; On                 ; On                 ;
+; Enable compact report table                                      ; Off                ; Off                ;
+; Restructure Multiplexers                                         ; Auto               ; Auto               ;
+; Create Debugging Nodes for IP Cores                              ; Off                ; Off                ;
+; Preserve fewer node names                                        ; On                 ; On                 ;
+; Intel FPGA IP Evaluation Mode                                    ; Enable             ; Enable             ;
+; Verilog Version                                                  ; Verilog_2001       ; Verilog_2001       ;
+; VHDL Version                                                     ; VHDL_1993          ; VHDL_1993          ;
+; State Machine Processing                                         ; Auto               ; Auto               ;
+; Safe State Machine                                               ; Off                ; Off                ;
+; Extract Verilog State Machines                                   ; On                 ; On                 ;
+; Extract VHDL State Machines                                      ; On                 ; On                 ;
+; Ignore Verilog initial constructs                                ; Off                ; Off                ;
+; Iteration limit for constant Verilog loops                       ; 5000               ; 5000               ;
+; Iteration limit for non-constant Verilog loops                   ; 250                ; 250                ;
+; Add Pass-Through Logic to Inferred RAMs                          ; On                 ; On                 ;
+; Infer RAMs from Raw Logic                                        ; On                 ; On                 ;
+; Parallel Synthesis                                               ; On                 ; On                 ;
+; DSP Block Balancing                                              ; Auto               ; Auto               ;
+; NOT Gate Push-Back                                               ; On                 ; On                 ;
+; Power-Up Don't Care                                              ; On                 ; On                 ;
+; Remove Redundant Logic Cells                                     ; Off                ; Off                ;
+; Remove Duplicate Registers                                       ; On                 ; On                 ;
+; Ignore CARRY Buffers                                             ; Off                ; Off                ;
+; Ignore CASCADE Buffers                                           ; Off                ; Off                ;
+; Ignore GLOBAL Buffers                                            ; Off                ; Off                ;
+; Ignore ROW GLOBAL Buffers                                        ; Off                ; Off                ;
+; Ignore LCELL Buffers                                             ; Off                ; Off                ;
+; Ignore SOFT Buffers                                              ; On                 ; On                 ;
+; Limit AHDL Integers to 32 Bits                                   ; Off                ; Off                ;
+; Optimization Technique                                           ; Balanced           ; Balanced           ;
+; Carry Chain Length                                               ; 70                 ; 70                 ;
+; Auto Carry Chains                                                ; On                 ; On                 ;
+; Auto Open-Drain Pins                                             ; On                 ; On                 ;
+; Perform WYSIWYG Primitive Resynthesis                            ; Off                ; Off                ;
+; Auto ROM Replacement                                             ; On                 ; On                 ;
+; Auto RAM Replacement                                             ; On                 ; On                 ;
+; Auto DSP Block Replacement                                       ; On                 ; On                 ;
+; Auto Shift Register Replacement                                  ; Auto               ; Auto               ;
+; Allow Shift Register Merging across Hierarchies                  ; Auto               ; Auto               ;
+; Auto Clock Enable Replacement                                    ; On                 ; On                 ;
+; Strict RAM Replacement                                           ; Off                ; Off                ;
+; Allow Synchronous Control Signals                                ; On                 ; On                 ;
+; Force Use of Synchronous Clear Signals                           ; Off                ; Off                ;
+; Auto RAM Block Balancing                                         ; On                 ; On                 ;
+; Auto RAM to Logic Cell Conversion                                ; Off                ; Off                ;
+; Auto Resource Sharing                                            ; Off                ; Off                ;
+; Allow Any RAM Size For Recognition                               ; Off                ; Off                ;
+; Allow Any ROM Size For Recognition                               ; Off                ; Off                ;
+; Allow Any Shift Register Size For Recognition                    ; Off                ; Off                ;
+; Use LogicLock Constraints during Resource Balancing              ; On                 ; On                 ;
+; Ignore translate_off and synthesis_off directives                ; Off                ; Off                ;
+; Timing-Driven Synthesis                                          ; On                 ; On                 ;
+; Report Parameter Settings                                        ; On                 ; On                 ;
+; Report Source Assignments                                        ; On                 ; On                 ;
+; Report Connectivity Checks                                       ; On                 ; On                 ;
+; Ignore Maximum Fan-Out Assignments                               ; Off                ; Off                ;
+; Synchronization Register Chain Length                            ; 2                  ; 2                  ;
+; Power Optimization During Synthesis                              ; Normal compilation ; Normal compilation ;
+; HDL message level                                                ; Level2             ; Level2             ;
+; Suppress Register Optimization Related Messages                  ; Off                ; Off                ;
+; Number of Removed Registers Reported in Synthesis Report         ; 5000               ; 5000               ;
+; Number of Swept Nodes Reported in Synthesis Report               ; 5000               ; 5000               ;
+; Number of Inverted Registers Reported in Synthesis Report        ; 100                ; 100                ;
+; Clock MUX Protection                                             ; On                 ; On                 ;
+; Auto Gated Clock Conversion                                      ; Off                ; Off                ;
+; Block Design Naming                                              ; Auto               ; Auto               ;
+; SDC constraint protection                                        ; Off                ; Off                ;
+; Synthesis Effort                                                 ; Auto               ; Auto               ;
+; Shift Register Replacement - Allow Asynchronous Clear Signal     ; On                 ; On                 ;
+; Pre-Mapping Resynthesis Optimization                             ; Off                ; Off                ;
+; Analysis & Synthesis Message Level                               ; Medium             ; Medium             ;
+; Disable Register Merging Across Hierarchies                      ; Auto               ; Auto               ;
+; Resource Aware Inference For Block RAM                           ; On                 ; On                 ;
++------------------------------------------------------------------+--------------------+--------------------+
+
+
++------------------------------------------+
+; Parallel Compilation                     ;
++----------------------------+-------------+
+; Processors                 ; Number      ;
++----------------------------+-------------+
+; Number detected on machine ; 8           ;
+; Maximum allowed            ; 4           ;
+;                            ;             ;
+; Average used               ; 1.00        ;
+; Maximum used               ; 1           ;
+;                            ;             ;
+; Usage by Processor         ; % Time Used ;
+;     Processor 1            ; 100.0%      ;
++----------------------------+-------------+
+
+
++-------------------------------+
+; Analysis & Synthesis Messages ;
++-------------------------------+
+Info: *******************************************************************
+Info: Running Quartus Prime Analysis & Synthesis
+    Info: Version 20.1.1 Build 720 11/11/2020 SJ Lite Edition
+    Info: Processing started: Sat Oct 05 13:04:41 2024
+Info: Command: quartus_map --read_settings_files=on --write_settings_files=off example -c example
+Warning (18236): Number of processors has not been specified which may cause overloading on shared machines.  Set the global assignment NUM_PARALLEL_PROCESSORS in your QSF to an appropriate value for best performance.
+Info (20030): Parallel compilation is enabled and will use 4 of the 4 processors detected
+Info (12021): Found 1 design units, including 1 entities, in source file uart_tx_tb.v
+    Info (12023): Found entity 1: UART_TX_tb File: D:/DDS/RKS/UART_TX_tb.v Line: 3
+Info (12021): Found 1 design units, including 1 entities, in source file uart_tx.v
+    Info (12023): Found entity 1: UART_TX File: D:/DDS/RKS/uart_tx.v Line: 7
+Info (12021): Found 1 design units, including 1 entities, in source file testcounter.v
+    Info (12023): Found entity 1: testbench5 File: D:/DDS/RKS/TestCounter.v Line: 3
+Info (12021): Found 1 design units, including 1 entities, in source file testbench.v
+    Info (12023): Found entity 1: testbench File: D:/DDS/RKS/TestBench.v Line: 5
+Info (12021): Found 1 design units, including 1 entities, in source file testalu.v
+    Info (12023): Found entity 1: testbench3 File: D:/DDS/RKS/TestALU.v Line: 3
+Info (12021): Found 1 design units, including 1 entities, in source file testadder8.v
+    Info (12023): Found entity 1: testbench2 File: D:/DDS/RKS/TestAdder8.v Line: 3
+Info (12021): Found 1 design units, including 1 entities, in source file testadder.v
+    Info (12023): Found entity 1: testbench1 File: D:/DDS/RKS/TestAdder.v Line: 3
+Info (12021): Found 1 design units, including 1 entities, in source file test_uarttx.v
+    Info (12023): Found entity 1: test_uartTX File: D:/DDS/RKS/test_uartTX.v Line: 4
+Info (12021): Found 1 design units, including 1 entities, in source file test_reguart.v
+    Info (12023): Found entity 1: test_RegUart File: D:/DDS/RKS/test_RegUart.v Line: 4
+Info (12021): Found 2 design units, including 1 entities, in source file test_pll.vhd
+    Info (12022): Found design unit 1: test_pll-SYN File: D:/DDS/RKS/test_pll.vhd Line: 52
+    Info (12023): Found entity 1: test_pll File: D:/DDS/RKS/test_pll.vhd Line: 42
+Info (12021): Found 1 design units, including 1 entities, in source file test_fapch.v
+    Info (12023): Found entity 1: test_fapch File: D:/DDS/RKS/test_fapch.v Line: 3
+Info (12021): Found 1 design units, including 1 entities, in source file test.v
+    Info (12023): Found entity 1: testbench4 File: D:/DDS/RKS/Test.v Line: 3
+Info (12021): Found 1 design units, including 1 entities, in source file signextend.v
+    Info (12023): Found entity 1: SignExtend File: D:/DDS/RKS/SignExtend.v Line: 1
+Info (12021): Found 1 design units, including 1 entities, in source file shift2.v
+    Info (12023): Found entity 1: shift2 File: D:/DDS/RKS/shift2.v Line: 1
+Info (12021): Found 1 design units, including 1 entities, in source file shift.v
+    Info (12023): Found entity 1: shift File: D:/DDS/RKS/shift.v Line: 1
+Info (12021): Found 1 design units, including 1 entities, in source file reguart.v
+    Info (12023): Found entity 1: RegUart File: D:/DDS/RKS/RegUart.v Line: 1
+Info (12021): Found 1 design units, including 1 entities, in source file register_file.v
+    Info (12023): Found entity 1: Register_File File: D:/DDS/RKS/Register_File.v Line: 1
+Info (12021): Found 1 design units, including 1 entities, in source file reg_foruart.v
+    Info (12023): Found entity 1: Reg_forUART File: D:/DDS/RKS/Reg_forUART.v Line: 1
+Info (12021): Found 1 design units, including 1 entities, in source file reg.v
+    Info (12023): Found entity 1: Reg File: D:/DDS/RKS/Reg.v Line: 1
+Error (10500): VHDL syntax error at pll_inst.vhd(1) near text "pll_inst";  expecting "entity", or "architecture", or "use", or "library", or "package", or "configuration" File: D:/DDS/RKS/pll_inst.vhd Line: 1
+Info (12021): Found 0 design units, including 0 entities, in source file pll_inst.vhd
+Info (12021): Found 2 design units, including 1 entities, in source file pll.vhd
+    Info (12022): Found design unit 1: pll-SYN File: D:/DDS/RKS/pll.vhd Line: 52
+    Info (12023): Found entity 1: pll File: D:/DDS/RKS/pll.vhd Line: 42
+Info (12021): Found 1 design units, including 1 entities, in source file pcplus4.v
+    Info (12023): Found entity 1: PcPlus4 File: D:/DDS/RKS/PcPlus4.v Line: 1
+Error (10170): Verilog HDL syntax error at new_pll_inst.v(1) near text: "(";  expecting ";". Check for and fix any syntax errors that appear immediately before or at the specified keyword. The Intel FPGA Knowledge Database contains many articles with specific details on how to resolve this error. Visit the Knowledge Database at https://www.altera.com/support/support-resources/knowledge-base/search.html and search for this specific error message number. File: D:/DDS/RKS/new_pll_inst.v Line: 1
+Error (10839): Verilog HDL error at new_pll_inst.v(1): declaring global objects is a SystemVerilog feature File: D:/DDS/RKS/new_pll_inst.v Line: 1
+Info (12021): Found 0 design units, including 0 entities, in source file new_pll_inst.v
+Info (12021): Found 1 design units, including 1 entities, in source file new_pll_bb.v
+    Info (12023): Found entity 1: new_pll File: D:/DDS/RKS/new_pll_bb.v Line: 34
+Error (10228): Verilog HDL error at new_pll.v(39): module "new_pll" cannot be declared more than once File: D:/DDS/RKS/new_pll.v Line: 39
+Info (10499): HDL info at new_pll_bb.v(34): see declaration for object "new_pll" File: D:/DDS/RKS/new_pll_bb.v Line: 34
+Info (12021): Found 0 design units, including 0 entities, in source file new_pll.v
+Info (12021): Found 1 design units, including 1 entities, in source file mux4.v
+    Info (12023): Found entity 1: MUX4 File: D:/DDS/RKS/MUX4.v Line: 1
+Info (12021): Found 1 design units, including 1 entities, in source file mux2.v
+    Info (12023): Found entity 1: MUX2 File: D:/DDS/RKS/MUX2.v Line: 3
+Info (12021): Found 1 design units, including 1 entities, in source file maindecoder.v
+    Info (12023): Found entity 1: MainDecoder File: D:/DDS/RKS/MainDecoder.v Line: 1
+Info (12021): Found 1 design units, including 1 entities, in source file instruction_memory.v
+    Info (12023): Found entity 1: Instruction_Memory File: D:/DDS/RKS/Instruction_Memory.v Line: 1
+Info (12021): Found 1 design units, including 1 entities, in source file fapch.v
+    Info (12023): Found entity 1: FAPCH File: D:/DDS/RKS/FAPCH.v Line: 1
+Info (12021): Found 1 design units, including 1 entities, in source file datapath.v
+    Info (12023): Found entity 1: DataPath File: D:/DDS/RKS/DataPath.v Line: 1
+Info (12021): Found 1 design units, including 1 entities, in source file data_memory_uart.v
+    Info (12023): Found entity 1: Data_Memory_UART File: D:/DDS/RKS/Data_Memory_UART.v Line: 1
+Info (12021): Found 1 design units, including 1 entities, in source file data_memory.v
+    Info (12023): Found entity 1: Data_Memory File: D:/DDS/RKS/Data_Memory.v Line: 1
+Info (12021): Found 1 design units, including 1 entities, in source file cpu_tb.v
+    Info (12023): Found entity 1: CPU_tb File: D:/DDS/RKS/CPU_tb.v Line: 3
+Info (12021): Found 1 design units, including 1 entities, in source file counter.v
+    Info (12023): Found entity 1: Counter File: D:/DDS/RKS/Counter.v Line: 1
+Info (12021): Found 1 design units, including 1 entities, in source file control_device.v
+    Info (12023): Found entity 1: Control_Device File: D:/DDS/RKS/Control_Device.v Line: 2
+Info (12021): Found 1 design units, including 1 entities, in source file alu_decoder.v
+    Info (12023): Found entity 1: ALU_Decoder File: D:/DDS/RKS/ALU_Decoder.v Line: 1
+Info (12021): Found 1 design units, including 1 entities, in source file alu.v
+    Info (12023): Found entity 1: ALU File: D:/DDS/RKS/ALU.v Line: 1
+Info (12021): Found 1 design units, including 1 entities, in source file adder32.v
+    Info (12023): Found entity 1: adder32 File: D:/DDS/RKS/adder32.v Line: 1
+Info (12021): Found 1 design units, including 1 entities, in source file adder8.v
+    Info (12023): Found entity 1: adder8 File: D:/DDS/RKS/adder8.v Line: 1
+Info (12021): Found 1 design units, including 1 entities, in source file adder.v
+    Info (12023): Found entity 1: adder File: D:/DDS/RKS/adder.v Line: 1
+Error: Quartus Prime Analysis & Synthesis was unsuccessful. 4 errors, 1 warning
+    Error: Peak virtual memory: 4776 megabytes
+    Error: Processing ended: Sat Oct 05 13:04:53 2024
+    Error: Elapsed time: 00:00:12
+    Error: Total CPU time (on all processors): 00:00:22
+
+

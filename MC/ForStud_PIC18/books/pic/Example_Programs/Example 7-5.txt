@@ -1,0 +1,82 @@
+/*
+ * 7-segment display demo example written for a PIC18F1220
+ */
+
+#include <p18cxxx.h>
+#include <delays.h>
+
+/* Set configuration bits
+ *  - set RC oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = RC
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+// ***************** program memory data **************************
+
+rom near char look7[] = // 7-segment lookup table
+{
+	0x40,		// 0	active low signals
+	0x79,		// 1   x g f e  d c b a
+	0x24,		// 2
+	0x30,		// 3
+	0x19,		// 4
+	0x12,		// 5
+	0x02,		// 6
+	0x78,		// 7
+	0x00,		// 8
+	0x10		// 9
+};
+
+// ***************** data memory data *****************************
+
+int count;
+
+#pragma code
+
+// ***************** functions ************************************
+
+void Switch( char bit )
+{
+	do		// wait for release 
+	{
+		while ( ( PORTA & bit ) != bit );
+		Delay1KTCYx(30);	// 15 ms delay
+	
+	}while( ( PORTA & bit ) != bit );
+
+
+	do		// wait for press 
+	{
+		while ( ( PORTA & bit ) == bit );
+
+		Delay1KTCYx(30);
+	
+	}while( ( PORTA & bit ) == bit );
+} 
+
+// ***************** main program *********************************
+
+void main (void)
+{	
+	ADCON1 = 0x7F;	// Ports A and B are digital 
+	TRISA = 1;		// Port A, bit 0 is input
+	TRISB = 0;		// Port B is output 
+	count = 0;		// start count at zero
+
+	while	( 1 )		// main loop
+	{
+		PORTB = look7[count]; // display number
+		Switch( 1 );		  // wait for pushbutton
+		count++;		
+		if ( count >= 10 )
+			count = 0;
+	}
+}

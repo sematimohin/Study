@@ -1,0 +1,79 @@
+/*
+ * Get temperature example written for a PIC18F1220
+ */
+
+#include <p18cxxx.h>
+
+/* Set configuration bits
+ *  - set RC oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = RC
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+#pragma code
+
+// main program
+
+#define SC PORTBbits.RB2
+#define CS PORTBbits.RB0
+#define SIO PORTBbits.RB1
+
+void sendClock(void)
+{
+	SC = 0;		// SC = 0
+	SC = 1;		// SC = 1
+}
+
+int getTemp(void)
+{
+	int temp;
+	int b;
+	char a
+	CS = 0;				// #CS = 0;
+
+	for ( a = 0; a < 16; a++ )		// get 16-bits
+	{
+		temp <<= 1;
+		temp |= SIO >> 1;	
+		sendClock();
+	}
+
+	a = 0;
+	CS = 1;				// #CS = 1
+	
+if ( ( temp & 0x8000 ) == 0x8000 )	// check sign
+	{
+		a = 1;
+		temp = -temp;			// make positive
+	}
+	
+b = temp;
+	temp >>= 7;
+	if ( ( b & 1 ) == 1 )		// round result
+		temp++;
+	
+temp = ( 9 * temp ) / 5 + 32;	// make Fahrenheit 
+	
+if ( a )
+		temp = -temp;
+	return temp;				// return with temperature
+}
+
+void main (void)
+{	
+	ADCON1 = 0x7f;		// all port pins digital
+	TRISB = 0x02;			// Port B programmed
+	PORTB = 0x05;			// #CS = 1 and SC = 1
+	
+	// do other stuff here
+
+}
+

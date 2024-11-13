@@ -1,0 +1,87 @@
+/*
+ * Serial LCD example written for a PIC18F1220
+ */
+
+#include <p18cxxx.h>
+#include <delays.h>
+
+/* Set configuration bits
+ *  - set RC oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = RC
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+#pragma code
+
+// main program
+
+void clockShiftReg(void)
+{
+	PORTBbits.RB3 = 1;		// pulse clock on RB3
+	PORTBbits.RB3 = 0;
+}
+
+void clearShiftReg(void)
+{
+	char a;
+	PORTBbits.RB0 = 0;		// data line low
+	for ( a = 0; a < 6; a++ )	// send 6 clocks
+		clockShiftReg();
+}
+
+void sendNibble(char nib, char RS)
+{
+	char a;
+	clearShiftReg();		// clear chift register
+	PORTBbits.RB0 = 1;		// send E
+	clockShiftReg();
+	PORTBbits.RB0 = RS;		// send RS
+	clockShiftReg();
+	for ( a = 0; a < 4; a++ )
+	{
+		PORTBbits.RB0 = nib & 1;
+		clockShiftReg();
+		nib >>= 1;
+	}
+}
+
+void sendLCDdata(char data, char RS)
+{
+	sendNibble( data >> 4, RS );	// send left nibble
+	sendNibble( data, RS );		// send right nibble			
+}
+
+void initLCD(void)
+{
+	Delay1KTCYx( 10 ); 		// wait 20 ms (see text)
+
+	sendLCDdata( 0x30, 0 );	// send 0x30
+	Delay1KTCYx( 3 );		// wait 6 ms
+	sendLCDdata( 0x30, 0 );	// send 0x30
+	Delay10TCYx( 1 );		// wait 100 us
+	sendLCDdata( 0x30, 0 );	// send 0x30
+	sendLCDdata( 0x30, 0 );	// send 0x30
+	sendLCDdata( 0x08, 0 );	// send 0x08
+	sendLCDdata( 0x01, 0 );	// send 0x01
+	Delay1KTCYx( 1);		// wait 2 ms 
+	sendLCDdata( 0x0C, 0 );	// send 0x0C
+	sendLCDdata( 0x06, 0 );	// send 0x06
+}
+
+void main (void)
+{	
+	ADCON1 = 0x7F;		// select al digital signals
+	TRISB = 0;			// Port B is output
+	PORTB = 0;			// all Port B pins = 0
+	initLCD();			// initialize LCD
+
+	// display data here
+}

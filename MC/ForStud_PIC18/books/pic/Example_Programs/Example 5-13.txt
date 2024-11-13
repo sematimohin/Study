@@ -1,0 +1,174 @@
+/*
+ * This is Example 5-13 for a 4MHz clock 
+ */
+
+#include <p18cxxx.h>
+#include <delays.h> 
+
+/* Set configuration bits
+ *  - set HS oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ */
+
+#pragma config OSC = HS
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+
+// program memory data
+
+int count;
+int state;
+int dataBit;
+int preambleCount;
+int firstByte;
+int secondByte;
+int checkSum;
+
+// functions
+
+void assembleByte(int* locale, int nextState )
+{
+	if ( preambleCount != 9 )
+	{
+		*locale >>= 1;
+		*locale += dataBit;
+		preambleCount++;
+	}
+	else
+	{
+		preambleCount = 0;
+		state = nextState;
+	}
+}
+
+void state0(void)
+{
+	if ( dataBit == 1 )
+	{
+		preambleCount--;
+		if ( preambleCount == 0 && dataBit == 0 )
+		{
+			state = 1;			// good preamble received
+			preambleCount = 0;	
+		}
+		else
+			preambleCount++;	// more 1's in preamble		
+	}	
+	else
+		preambleCount = 10;		//restart wait
+}	
+
+void state1(void)
+{
+	assembleByte( &firstByte, 2 );
+	if ( dataBit == 1 )
+		state = 0;				// on error
+}
+
+void state2(void)
+{
+	assembleByte( &secondByte, 3 );
+	if ( dataBit == 1 );
+		state = 0;				// on error
+}
+
+void state3(void)
+{
+	assembleByte( &checkSum, 4 );
+	if ( dataBit == 0 )
+		state = 0;				// on error
+}
+
+void state4(void)
+{
+	state = 0;			// Reset state
+	if ( ( firstByte ^ secondByte ^ checkSum ) == 0 )
+	{
+		// this is where the control software is 
+		// placed to program the controller
+		// or activate a device connected to a 
+		// port if the address matches
+	}	
+}
+
+typedef void (*ptr) (void);	// array of function pointers
+
+ptr states[] =			// for machine state
+{
+	&state0,
+	&state1,
+	&state2,
+	&state3,
+	&state4
+};
+
+void Update(void)				
+{
+	if ( count == 0 )	// system reset command
+	{
+		state = firstByte = secondByte = checkSum = dataBit = 0;
+		preambleCount = 10;		//minimum preamble bit count
+		count = 1;
+	}			
+
+	// measure pulse width
+	// 		count = 0 resets the system
+	// 		count = 1 or 2 counts (28 us to 84 us) data is a logic 1)
+	// 		count is more than 2 counts data is a logic zero
+
+	else	
+	{
+		count = 0;					// start fresh count			
+		if ( PORTBbits.RB0 == 1 )
+		{	
+			while ( PORTBbits.RB0 == 1)		
+			{
+				Delay10TCYx(2);		// 20 microseconds
+				count++;
+			}
+		}
+		else
+		{
+			while ( PORTBbits.RB0 == 0)		
+			{
+				Delay10TCYx(2);		// 20 microseconds
+				count++;
+			}
+		}
+		if ( PORTBbits.RB0 == 1 )	// skip other half bit
+			while ( PORTBbits.RB0 == 1 );
+		else
+			while ( PORTBbits.RB0 == 0 );
+
+		if ( count == 0 )
+			state = 0;			// reset system
+		else if ( count < 3 )
+			dataBit = 1;		// bit = 1
+		else
+			dataBit = 0;		// bit = 0
+	}
+
+	states[state]();			// function call to a state function
+}
+
+
+// the one and only main program
+
+
+void main (void)
+{
+	ADCON1 = 0x7F;	// configure PORTS A and B as digital
+				// 	this might need to be changed depending 
+				// 	on the microcontroller version.
+
+	TRISB = 1;		// configure Port B
+	state = 0;		// starting state is 0
+	count = 0;		// reset program and start looking for 
+				//	a valid preamble
+
+	while ( 1 )		// main loop
+		Update();	// search for preamble and a good packet
+}
+
+

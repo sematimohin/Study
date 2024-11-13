@@ -1,0 +1,30 @@
+/*
+ * This is Example 5-7 
+ */
+
+#include <p18cxxx.h>   
+#include <string.h>
+#include <stdlib.h>
+
+/* Set configuration bits
+ *  - set HS oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ */
+
+#pragma config OSC = HS
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+
+char buffer[] = "The time is 22 hours.";
+char hour;
+int a;
+
+void main (void)
+{
+	for ( a = 0; a < strlen(buffer); a++ )
+		if ( buffer[a] >= '0' && buffer[a] <= '9' )
+			break;
+
+	hour = atob ( buffer + a );
+}

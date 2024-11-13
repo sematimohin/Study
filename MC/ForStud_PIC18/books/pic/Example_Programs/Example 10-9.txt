@@ -1,0 +1,57 @@
+/*
+ * DAC motor control example
+ */
+
+#include <p18cxxx.h>
+#include <sw_spi.h>
+
+/* Set configuration bits
+ *  - set internal oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = INTIO2
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+// function to control the speed of the motor
+// through the DAC.  Speeds are 0 through 152
+
+void Speed(unsigned char speed)
+{
+	if ( speed >= 0 && speed <= 152 )
+	{
+		speed += 72;	// bias the speed by 1.4 volts
+		WriteSWSPI( 0x90 );	// send speed
+		WriteSWSPI( 0x00 );
+		WriteSWSPI( speed );
+	}
+}
+
+#pragma code
+
+// main program
+
+void main (void)
+{	
+	ADCON1 = 0x7F;	// digital I/O pins 
+	TRISB = 0;		// Port B is output
+	OSCCON = 0x73;	// 8 MHz internal clock
+
+	OpenSWSPI();	// configure SPI port pins
+
+	WriteSWSPI( 0x90 );	// set to noraml mode
+	WriteSWSPI( 0x01 );
+	WriteSWSPI( 0x00 );
+	
+	while ( 1 )
+	{
+		// do other stuff
+	}
+}
+

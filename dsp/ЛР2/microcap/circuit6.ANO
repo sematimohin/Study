@@ -1,28 +1,31 @@
 ********************************************************************************
-***                            Micro-Cap 10.2.0.0                            ***
+***                       Micro-Cap 12.2.0.5 (64 bit)                        ***
 ***                                                                          ***
 ***                                                                          ***
 ***                         AC Analysis of circuit6                          ***
-***                           08.10.2024 21:55:32                            ***
+***                           05.11.2024 21:39:13                            ***
 ********************************************************************************
 Limits
 ======
-Frequency Range  Log 400,100
-Number of Points 1001
-Temperature      Linear 27
-Maximum Change % 5
-Noise Input      NONE
-Noise Output     2
-Run Options      Normal
-State Variables  Zero
-Operating Point  On
+Frequency Range          Log 400,100
+Number of Points         1001
+Temperature              Linear 27
+Maximum Change %         5
+Noise Input              NONE
+Noise Output             2
+Run Options              Normal
+State Variables          Zero
+Operating Point          On
+Auto Scale Ranges        On
+Accumulate Plots         Off
+Ignore Expression Errors Off
 
 
 *****************************************************
 ***                Temperature=27                 ***
 *****************************************************
 
-Temperature=27 
+Temperature=27
 
 DC Operating Point Voltages
 ===========================

@@ -1,0 +1,92 @@
+/*
+ * Elevator floor controller
+ */
+
+#include <p18cxxx.h>
+#include <delays.h>
+#include <ECAN.h>
+
+/* Set configuration bits
+ *  - set HS oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = HS
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+unsigned char floor[1];
+char fired;
+unsigned long id;
+unsigned long iD;
+unsigned char data[1];
+char dataLen;
+
+#pragma code
+
+// main program
+
+void checkButton(void)
+{
+	if ( PORTB & 0xC0 != 0xC0 )
+	{
+		if ( fired == 0 )
+		{
+			Delay1KTCYx(15);	// de-bounce
+			if ( PORTB & 0xC0 != 0xC0 )
+			{
+				fired = 1;
+				if ( PORTBbits.RB7 == 0 )
+				{
+					PORTCbits.RC6 = 1;	// up
+					floor[0] |= 0x80;
+				}
+				else				// down
+				{
+					PORTCbits.RC7 = 1;
+					floor[0] &= 0x7F;
+				}
+				while ( !ECANSendMessage( iD,
+					 floor,
+					 1,
+					 ECAN_TX_STD_FRAME ) );
+			}
+		}
+		else
+			fired = 0;
+	}
+}
+
+void main (void)
+{	
+    	ECAN_RX_MSG_FLAGS flags;
+	ADCON1 = 0x7f;		// all port pins digital
+	TRISA = 0;			// program Ports
+	TRISB = 0xFB;	
+	TRISC = 0;
+	fired = PORTA = PORTC = iD = 0;	// LEDs off
+	floor[0] = (PORTB & 3) | ( ( PORTB & 0x30 ) << 2 );
+
+	ECANInitialize();	// initialize CAN
+
+	while ( 1 )
+	{
+		checkButton();
+		if ( ECANReceiveMessage(&id, data, &dataLen, &flags) )
+		{
+			if ( id == 1 )	// if from car controller
+			{
+				PORTA = 1;	// change floor display
+				PORTA <<= data[0];
+				if ( data[0] == ( floor[0] & 0x7F ) )
+					PORTC = PORTC & 0x3F;	// UP & DOWN off
+			}		
+		}
+	}
+}
+

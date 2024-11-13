@@ -1,0 +1,38 @@
+;************** ASCII lookup table ****************
+;
+;
+TABLE7		CODE_PACK  	0x1FF0
+HexAsc		DB	0x30, 0x31, 0x32, 0x33
+		DB	0x34, 0x35, 0x36, 0x37
+		DB	0x38, 0x39, 0x41, 0x42
+		DB	0x43, 0x44, 0x45, 0x46
+
+
+
+;********** Hex2Ascii ************************
+;
+;  uses 1 level of stack data
+;  uses WREG, TABPTR, and TABLAT
+;
+;  accesses table at 0x1FF0 through 0x1FFF
+;
+;  converts WREG from hex to Ascii code
+;  Asxii is returned in WREG
+;
+; 
+
+Hex2Ascii:
+	ANDLW	0x0F		;clear high nibble
+
+	ADDLW	0xF0		;generate table address
+	MOVWF	TBLPTRL
+	MOVLW	0x1F
+	MOVWF	TBLPTRH
+	MOVLW	0
+	MOVWF	TBLPTRU
+
+	TBLRD*			;get Ascii code
+	MOVFF	TABLAT, WREG
+
+	RETURN
+

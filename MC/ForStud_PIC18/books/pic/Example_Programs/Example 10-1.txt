@@ -1,0 +1,116 @@
+// ***************** CONSTANTS *************************
+
+#define SCL PORTBbits.RB7			// RB7 is SCL
+#define SDA PORTBbits.RB6			// RB6 is SDA
+#define SDA_TRIS TRISBbits.TRISB6		
+
+//*************** SERIAL EEPROM FUNCTIONS **************
+
+void SendStart(void)	// send Start 
+{
+	SDA_TRIS = 1;		// SDA = 1
+	SCL = 1;		// SCL = 1
+	SDA_TRIS = 0;		// SDA = 0
+	SCL = 0;       	// SCL = 0    
+}
+
+void SendStop(void)		// send Stop
+{
+    	SCL = 0;		// SCL = 0
+	SDA_TRIS = 0; 	// SDA = 0
+ 	SCL = 1;		// SCL = 1
+	SDA_TRIS = 1;    	// SDA = 1
+}
+
+char SendSM(char data)	// send a byte
+{
+	char a, b, c;
+	c = 0;
+	for ( a = 0; a < 8; a++ )
+	{	
+		SCL = 0;			// SCL = 0
+		if ( ( data & 0x80 ) == 0x80 )	// leftmost data bit
+			SDA_TRIS = 1;		// SDA = 1
+		else
+			SDA_TRIS = 0;		// SDA = 0
+		data <<= 1;			// shift data left
+		SCL = 1;			// SCL = 1
+	}
+	SCL = 0;				// SCL = 0
+	SDA_TRIS = 1;	
+	SCL = 1;				// SCL = 1
+    	if ( SDA == 1 ) 			// Check SDA for ACK
+        	c = 1;             		
+	SCL = 0;				// SCL = 0
+	return c;				// return ACK
+}
+
+char ReadSM(void)			// read a byte
+{
+   	char a;          
+    	char b = 0;       
+	SDA_TRIS = 1;			// set SDA for read	
+	SCL = 0;			// SCL = 0
+	for (a = 0; a < 8; a++)    
+    	{
+		b <<= 1;       	// Shift left for next bit    
+		SCL = 1;	  	// SCL = 1
+    		if ( SDA == 1 )                       
+        		b |= 1;	// add in SDA if 1      
+		SCL = 0;		// SCL = 0
+    	}
+	SDA_TRIS = 0;			// SDA = 0
+    	return b;			// return retrieved data
+}
+
+void Ack(char control)		// test ACK
+{
+	char a = 1;
+ 	do
+    	{
+    		SendStart();                 
+     		a = SendSM( control ); 	// Output control byte
+    	}
+	while (a == 1);
+	SendStop();                  
+}
+
+// Read a byte from memory
+//	address is 0x0000 -- 0xFFFF
+
+char ReadByte(int address)
+{
+	char a = 0;
+	SDA = 0;			// make certain SDA = 0
+	SendStart();
+	if ( ( address & 0x8000 ) == 0x8000 )
+		a = 2;
+	else
+		a = 0;
+	SendSM( 0xA0 + a );		// command (write address)
+	SendSM(address >> 8 );
+	SendSM(address);
+	SendStart();
+	SendSM( 0xA1 | a );		// command (read data)
+	a = ReadSM();
+	SendStop();
+	return ( a );
+}
+
+void WriteByte(int address, char data)
+{
+	char a = 0;
+	SDA = 0;			// make certain SDA = 0
+	SendStart();
+	if ( ( address & 0x8000 ) == 0x8000 )
+		a = 2;
+	SendSM( 0xA0 | a );
+	SendSM( address >> 8 );
+	SendSM( address );
+	SendSM( data );
+	SendStop();
+	Ack( 0xA0 | a );		// wait for ACK	
+}
+
+
+

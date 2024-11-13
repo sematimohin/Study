@@ -1,0 +1,170 @@
+/*
+ * A USART interrupt example
+ */
+
+#include <p18cxxx.h>
+#include <usart.h>
+
+/* Set configuration bits
+ *  - set high-speed oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = HS
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+void MyHighInt(void);		// prototypes for the interrupt
+void MyLowInt(void);		// service procedures
+
+#pragma interrupt MyHighInt	// MyHighInt is an interrupt
+#pragma code high_vector=0x08	// high_vector is at 0x0008
+
+void high_vector(void)		// the high prioity vector
+{
+	_asm GOTO MyHighInt _endasm	// goto high software
+}
+
+#pragma interruptlow MyLowInt	// MyLowInt is an interrupt
+#pragma code low_vector=0x18	// low vector is at 0x0018
+
+void low_vector(void)		// the low prioity vector
+{
+	_asm GOTO MyLowInt _endasm		// goto low software
+}
+
+// data memory data
+
+char inQueue[16];
+char outQueue[16];
+char inPi;
+char inPo;
+char outPi;
+char outPo;
+
+#pragma code				// start code here
+
+int outInQueue(void)
+{
+	int temp;
+	if ( inPi == inPo )
+		return 0x100;		// if empty
+	temp = inQueue[inPo];	// get data
+	inPo = ( inPo + 1 ) & 0x0F;
+	return temp;
+}
+
+int inInQueue(char data)
+{
+	if ( inPi == ( ( inPo + 1 ) & 0x0F ) )
+		return 0x100;		// if full
+	inQueue[inPi] = data;
+	inPi = ( inPi + 1 ) & 0x0F;
+	return 0;
+}
+
+int outOutQueue(void)
+{
+	int temp;
+	if ( outPi == outPo )
+		return 0x100;		// if empty
+	temp = outQueue[outPo];	// get data
+	outPo = ( outPo + 1 ) & 0x0F;
+	return temp;
+}
+
+int inOutQueue(char data)
+{
+	if ( outPi == ( ( outPo + 1 ) & 0x0F ) )
+		return 0x100;		// if full
+	inQueue[outPi] = data;
+	outPi = ( outPi + 1 ) & 0x0F;
+	PIE1bits.TXIE = 1;		// transmitter on
+	return 0;
+}
+
+void MyHighInt(void)
+{	
+	int temp;
+	if ( PIR1bits.RCIF == 1 )
+	{
+		PIR1bits.RCIF = 0;		// clear interrupt
+		inInQueue( RCREG );		// store received data in queue
+	}
+	else if ( PIR1bits.TXIF == 1 )
+	{
+		PIR1bits.TXIF = 0;		// clear interrupt
+		temp = outOutQueue();
+		if ( temp == 0x100 )
+			PIE1bits.TXIE = 0;	// transmitter off
+		else
+			TXREG = temp;		// send data
+	}
+}
+
+void MyLowInt(void)
+{
+	// nothing in this example
+}
+
+// main program
+
+void main (void)
+{
+	int temp;
+	ADCON1 = 0x7F;		// all digital
+	TRISC = 0x80;			// program Port C
+
+	IPR1bits.TXIP = 1;		// select high priority
+	IPR1bits.RCIP = 1;	
+
+	inPo = inPi = outPo = outPi = 0;	// setup queues
+
+	OpenUSART(USART_TX_INT_ON &	//USART operates at 9600 Baud
+			USART_RX_INT_ON &
+			USART_ASYNCH_MODE &
+			USART_EIGHT_BIT &
+			USART_CONT_RX &
+			USART_BRGH_HIGH,
+			25 );
+
+	RCONbits.IPEN = 1;		// IPEN = 1 to enable priority interrupts
+	INTCONbits.GIEH = 1;	// enable high priority interrupt
+	INTCONbits.GIEL = 0;	// enable low priority interrupt
+
+	while ( 1 )
+	{
+		temp = outInQueue();	// get PC data from InQueue
+		if ( temp != 0x100 )	// if data found
+		{
+			if ( temp == 'C' )	// if code C (connect)
+			{ 
+				inOutQueue('H'); 	// send H
+				inOutQueue('e'); 	// send e
+				inOutQueue('l'); 	// send l
+				inOutQueue('l'); 	// send l
+				inOutQueue('o'); 	// send o
+				inOutQueue(13); 	// send carraige return
+				inOutQueue(10); 	// send line feed
+			}
+			else if ( temp == 'G' ) // if code is G (goodbye)
+			{
+				inOutQueue('G'); 	// send G
+				inOutQueue('o'); 	// send o
+				inOutQueue('o'); 	// send o
+				inOutQueue('d'); 	// send d
+				inOutQueue('b'); 	// send b
+				inOutQueue('y'); 	// send y
+				inOutQueue('e'); 	// send r
+				inOutQueue(13); 	// send carraige return
+				inOutQueue(10); 	// send line feed				
+			}
+		}
+	}
+}
+

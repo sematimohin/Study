@@ -1,0 +1,57 @@
+;************* FUNCTION Hex2Ascii ***********
+;                                            
+; uses 1 stack level                        
+; uses WREG                                  
+;
+; converts right nibble of WREG from hex to Ascii
+;                                            
+;********************************************
+
+Hex2Ascii:
+		
+	ANDLW	0x0F		;isolate low nibble
+
+	ADDLW	0x30
+	DAW
+	BTFSC	WREG, 6
+
+	INCF	WREG
+
+	RETURN
+
+
+;************ FUNCTION Hex2Asc **************
+;                                            
+; uses 2 stack levels                        
+; uses WREG, Ascii_L, and Ascii_H
+; uses Hex2Ascii                                  
+;
+; converts byte in WREG from hex to Ascii
+;	where Ascii_L contains rightmost Ascii digit
+;	and Ascii_H contains leftmost Ascii digit
+;                                            
+;********************************************
+
+Hex2Asc:
+
+	MOVWF	Ascii_H
+	CALL	Hex2Ascii	;convert low nibble
+	MOVWF	Ascii_L
+
+	MOVFF	Ascii_H, WREG
+	SWAPF	WREG		;swap nibbles
+
+	CALL	Hex2Ascii	;convert high nibble
+	MOVWF	Ascii_H
+
+	RETURN  
+
+;************** MAIN PROGRAM ******************
+
+Main:
+	MOVLW	0x5c		;load test data
+
+	CALL	Hex2Asc		;convert entire byte to Ascii
+
+Stop:	BRA Stop
+

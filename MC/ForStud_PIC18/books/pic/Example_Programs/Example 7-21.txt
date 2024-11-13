@@ -1,0 +1,81 @@
+/*
+ * Flow example written for a PIC18F1220
+ */
+
+#include <p18cxxx.h>
+#include <timers.h>
+/* Set configuration bits
+ *  - set HS oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = HS
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+void MyHighInt(void);		// prototypes for interrupts
+
+#pragma interrupt MyHighInt	// MyHighInt is an interrupt
+#pragma code high_vector=0x08	// high_vector is the vector at 0x08
+
+void high_vector(void)
+{
+	_asm GOTO MyHighInt _endasm
+}
+
+// data memory data
+
+float flowRate;
+
+// high prioity interrupt
+
+#pragma code	
+
+void Timer1(void) 			// every 1/10 of a second
+{
+	PIR1bits.TMR1IF = 0;	// reenable Timer 1 
+	flowRate = ReadTimer0() * 10.0 * 60 / 8300;
+	WriteTimer0( 0 );		// reset count
+}
+
+void MyHighInt(void)
+{
+	if ( PIR1bits.TMR1IF == 1 )
+		Timer1();	
+}		
+
+// main program
+
+void main (void)
+{	
+	ADCON1 = 0x7f;		// all port pins digital
+	TRISA = 0x10;		// Port A programmed
+	
+	WriteTimer0( 0 );	// Timer 0 to 0
+
+	OpenTimer0(TIMER_INT_OFF & 	// Timer 0 interrupt on
+			T0_16BIT &		// Timer 0 is 16-bits
+			T0_SOURCE_EXT &	// Timer 0 clock is RA4
+			T0_EDGE_FALL & 	// pin RA4 negative edge 
+			T0_PS_1_1 );	// Timer 0 prescaler is 1
+
+	WriteTimer1( 5303 );	// Timer 1 to 5303
+
+	OpenTimer1( TIMER_INT_ON &	// Timer 1 interrupt on
+				T1_16BIT_RW &	// Timer 1 is 16 bits
+				T1_SOURCE_INT &	// Timer 1 clock is internal
+				T1_PS_1_8 &		// Timer 1 prescaler is 8
+				T1_OSC1EN_OFF );
+
+	RCONbits.IPEN = 1;			// IPEN = 1
+	INTCONbits.GIEH = 1;		// enable high priority interrupts
+
+
+	// do other stuff here
+
+}

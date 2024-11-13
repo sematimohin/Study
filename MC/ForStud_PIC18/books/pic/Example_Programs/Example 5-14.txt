@@ -1,0 +1,35 @@
+/*
+ * This is Example 5-14 
+ */
+
+#include <p18cxxx.h>
+#include <math.h> 
+
+/* Set configuration bits
+ *  - set HS oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ */
+
+#pragma config OSC = HS
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+
+// program memory data
+
+float Fr[10];
+float L = 1.0e-3;
+float C = 1.0e-6;
+
+// main program
+
+
+void main (void)
+{
+	int a;
+	for( a = 0; a < 10; a++ )
+	{
+		Fr[a] = 1 / (6.2831853 * sqrt( L * C ));
+		L += 1.0e-6;
+	}
+}

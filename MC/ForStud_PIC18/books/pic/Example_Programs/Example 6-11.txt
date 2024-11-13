@@ -1,0 +1,113 @@
+;******************************************************************************
+;Dice Toss example written in assembly language
+
+	LIST P=18F1220, F=INHX32 ;directive to define processor and file format
+	#include <P18F1220.INC>	 ;processor specific variable definitions
+
+;******************************************************************************
+;Configuration bits
+
+	__CONFIG  _CONFIG1H, _IESO_OFF_1H & _FSCM_OFF_1H & _RC_OSC_1H
+	__CONFIG  _CONFIG2L, _BOR_OFF_2L & _PWRT_OFF_2L
+	__CONFIG  _CONFIG2H, _WDT_ON_2H & _WDTPS_4_2H
+	__CONFIG  _CONFIG3H, _MCLRE_ON_3H
+	__CONFIG  _CONFIG4L, _DEBUG_OFF_4L & _LVP_OFF_4L & _STVR_OFF_4L
+	__CONFIG  _CONFIG5L, _CP0_OFF_5L & _CP1_OFF_5L
+	__CONFIG  _CONFIG5H, _CPB_OFF_5H & _CPD_OFF_5H
+	__CONFIG  _CONFIG6L, _WRT0_OFF_6L & _WRT1_OFF_6L
+	__CONFIG  _CONFIG6H, _WRTC_OFF_6H & _WRTB_OFF_6H & _WRTD_OFF_6H
+	__CONFIG  _CONFIG7L, _EBTR0_OFF_7L & _EBTR1_OFF_7L
+	__CONFIG  _CONFIG7H, _EBTRB_OFF_7H
+
+;******************************************************************************
+;Data memory definitions
+
+		UDATA_ACS
+
+COUNT		RES	1	;count for random number
+
+;Program memory definitions
+;
+;lookup table
+
+Look		CODE_PACK 
+Lookup:
+		DB	0x77, 0x7E, 0x76		; 1,1   1,2   1,3 
+		DB	0x7A, 0x72, 0x78		; 1,4   1,5   1,6
+		DB	0xE7, 0xEE, 0xE6		; 2,1   2,2   2,3
+		DB	0xEA, 0xE2, 0xE8		; 2,4   2,5   2,6
+		DB	0x67, 0x6E, 0x66		; 3,1   3,2   3,3
+		DB	0x6A, 0x62, 0x68		; 3,4   3,5   3,6
+		DB	0xA7, 0xAE, 0xA6		; 4,1   4,2   4,3
+		DB	0xAA, 0xA2, 0xA8		; 4,4   4,5   4,6
+		DB	0x27, 0x2E, 0x26		; 5,1   5,2   5,3
+		DB	0x2A, 0x22, 0x28		; 5,4   5,5   5,6
+		DB	0x87, 0x8E, 0x86		; 6,1   6,2   6,3
+		DB	0x8A, 0x82, 0x88		; 6,4   6,5   6,6
+
+;******************************************************************************
+;Reset vector
+; This code will start executing when a reset occurs.
+
+RESET_VECTOR	CODE	0x0000
+
+		goto	Main		;go to start of main code
+
+		CODE
+
+
+;******************************************************************************
+;Start of main program
+
+Main:
+
+	MOVLW	0x7F
+	MOVWF	ADCON1		;all digital ports
+	
+	MOVLW	0x01	
+	MOVWF	TRISA		;port A, bit zero, is input
+	
+	MOVLW	0
+	MOVWF	TRISB		;port B is output
+	
+	CLRF	PORTB		;all LEDs off
+	CLRF	COUNT		;clear count
+
+MainLoop:
+
+	CLRWDT			;reset watchdog
+
+	BTFSC	PORTA,0	;test bit 0 of Port A
+	BRA	MainLoop	;if bit 0 is a one
+
+	INCF	COUNT		;increment count
+
+	MOVLW	.36
+	SUBWF	COUNT, 0
+	BNZ	DoNotClear	;if count is not 36
+	CLRF	COUNT		
+
+DoNotClear:
+
+	MOVLW	UPPER(Lookup)	;get lookup table address
+	MOVWF	TBLPTRU
+	MOVLW	HIGH(Lookup)
+	MOVWF	TBLPTRH
+	MOVLW  LOW(Lookup)
+	MOVWF	TBLPTRL
+	MOVF	COUNT,0	;add count to table address
+	ADDWF	TBLPTRL
+	MOVLW	0
+	ADDWFC	TBLPTRH
+	ADDWFC	TBLPTRU
+	TBLRD*			;lookup code
+	MOVF	TABLAT,0	;get code to WREG
+	MOVWF	PORTB		;display it
+	
+	GOTO	MainLoop
+
+
+;******************************************************************************
+;End of program
+
+	END

@@ -1,0 +1,38 @@
+/*
+ * This is Example 5-8 
+ */
+
+#include <p18cxxx.h>   
+#include <string.h>
+
+/* Set configuration bits
+ *  - set HS oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ */
+
+#pragma config OSC = HS
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+
+// program memory data
+
+rom near char lookUpTable[][20] = 
+{ 	"my first message",
+	"my second message",
+	"my third message",
+	"my fourth message",
+	"my fifth message"
+};
+
+// data memory data
+
+char buffer[20];
+
+// main program
+
+void main (void)
+{
+	strcpypgm2ram(buffer, lookUpTable[1]);
+}
+

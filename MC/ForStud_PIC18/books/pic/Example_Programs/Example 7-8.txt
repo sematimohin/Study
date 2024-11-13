@@ -1,0 +1,40 @@
+#define LCD PORTB			// define data port
+#define RS PORTBbits.RB5		// define RS
+#define E PORTBbits.RB4		// define E
+#define RW PORTBbits.RB6		// define RW
+#define LCD_TRIS TRISB		// define LCD_TRIS			
+
+void SendLCDdataWbusy(char data, char rs)
+{
+	RW = 0;			// select write mode
+	LCD = data >> 4;		// send left nibble
+	RS = rs;			// set RS
+	E = 1;				// pulse E
+	E = 0; 
+	Delay10TCYx( 2 );		// delay 40 us 
+	LCD = data & 0x0F;		// send right nibble
+	RS = rs;			// set RS
+	E = 1;				// pulse E
+	E = 0;
+	Delay10TCYx( 2 );		// delay 40 us 
+	RW = 1;			// select read mode
+	RS = 1;			// set R/W
+	LCD_TRIS = 0x0F;		// set RB0--RB4 to input
+	RS = 0;			// read busy command
+	E = 1;				// read high nibble
+	E = 0;   
+
+	data = LCD;			// read busy bit
+
+	while ( ( data & 8 ) == 8 )
+	{
+		E = 1;			// read low nibble
+		E = 0;
+		E = 1;			// pulse E
+		E = 0;			// read high nibble 
+		data = LCD; 		// read LCD
+		
+	}
+	LCD_TRIS = 0;			// program PORT B as output
+}
+

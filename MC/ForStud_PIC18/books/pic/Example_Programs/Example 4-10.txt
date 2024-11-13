@@ -1,0 +1,34 @@
+;***************** Div function *******************
+;
+; uses 1 program stack level
+; uses WREG, PRODL, PRODH, TABLAT, TBLPTRL, and TBLPTRH
+;
+; Quotient returned in PRODL and remainder is returned in PRODH
+;     TABLAT is preloaded with divisor
+;     PRODL and PRODH is preloaded with dividend
+
+Div:
+	MOVLW	8			;load counter with 8
+	MOVFF	WREG, TBLPTRL
+
+Div1:
+	BCF	STATUS, 0		;shift quotient left
+	RLCF	TBLPTRH
+	BCF	STATUS, 0		;shift dividend left
+	RLCF	PRODL
+	RLCF	PRODH
+
+	MOVF	TABLAT, 0		;compare divisor with dividend
+	SUBWF	PRODH, 0
+	BNC	Div2			;if divisor greater than dividend
+
+	MOVFF	WREG, PRODH
+	INCF	TBLPTRH
+
+Div2:
+	DECFSZ	TBLPTRL		;decrement count
+	BRA	Div1	
+
+	MOVFF	TBLPTRH, PRODL	;quotient to PRODL
+	RETURN
+

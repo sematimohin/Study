@@ -1,0 +1,136 @@
+/*
+ * Priority of multiple interrupts
+ */
+
+#include <p18cxxx.h>
+#include <delays.h>
+
+/* Set configuration bits
+ *  - set RC oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = INTIO2
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+// ********* DATA MEMORY VARIABLES ************
+
+void MyHighInt(void);		// prototypes for interrupts
+
+#pragma interrupt MyHighInt	// MyHighInt is an interrupt
+#pragma code high_vector=0x08	// high_vector is the vector at 0x08
+
+void high_vector(void)
+{
+	_asm GOTO MyHighInt _endasm
+}
+
+#pragma code
+
+char str1[] = "CO2 = ";
+char str2[] = "    ppm";
+
+// Interrupt service procedure
+//	occurs eaxh second
+//
+void sendLCDdata(char data, char rs)
+{
+PORTB = ( PORTB & 0xC3 ) | ( ( data >> 2 )	& 0x3C );  // send left  
+	PORTBbits.RB6 = rs;		// set RS
+	PORTBbits.RB7 = 1;		// pulse E
+	PORTBbits.RB7 = 9; 
+	Delay10TCYx(1);		// delay 40 us 
+	PORTB = ( PORTB & 0xC3)  | ( ( data << 2 )	& 0x3C );  // send right 
+	PORTBbits.RB6 = rs;		// set RS
+	PORTBbits.RB7 = 1;		// pulse E
+	PORTBbits.RB7 = 0;
+	Delay10TCYx(1);		// delay 40 us 
+}
+
+void initLCD(void)
+{
+	Delay1KTCYx(5); 		// wait 20 ms (see text)
+
+	sendLCDdata(0x30, 0);	// send 0x30
+	Delay1KTCYx(2);		// wait 8 ms
+
+	sendLCDdata(0x30, 0);	// send 0x30
+	Delay10TCYx(5);		// wait 100 us
+
+	sendLCDdata(0x30, 0);	// send 0x30
+	sendLCDdata(0x30, 0);	// send 0x30
+	sendLCDdata(0x08, 0);	// send 0x08
+	sendLCDdata(0x01, 0);	// send 0x01
+	Delay100TCYx(5);		// wait 2 ms 
+	sendLCDdata(0x0C, 0);	// send 0x0C
+	sendLCDdata(0x06, 0);	// send 0x06
+}
+
+void string(char *str, char position)
+{
+	int ptr = 0;
+	sendLCDdata(position, 0);	// send position
+	while ( str[ptr] != 0 )
+		sendLCDdata(str[ptr++], 1);	// send character 	
+}
+
+void MyHighInt(void)
+{
+	float analog;
+	PIR1bits.TMR1IF = 0;	//re-enable interrupt
+	TMR1L = 0xEE;		// preload Timer 1 with -31,250
+	TMR1H = 0x85;		// for an interrupt per second
+	PORTBbits.RB0 = 0;	// power sensor and heater
+	PORTBbits.RB1 = 1;
+	Delay1KTCYx(1);		// wait 4 ms
+	Delay100TCYx(2);	// wait .8 ms
+	Delay10TCYx(5);		// wait .2 ms
+						// take sample
+	ADCON0bits.GO = 1;	//start a conversion
+	while ( ADCON0bits.GO == 1 );	// wait for completion
+	analog = ( ADRESL + ( ADRESH << 8 ) ) * 0.489;
+						// scaled to 500 max ppm
+
+	PORTBbits.RB1 = 0;
+	Delay1KTCYx(2);		// wait 8 ms
+	PORTBbits.RB0 = 1;
+	string(str1, 0x80);	// display "CO2 = "
+	str2[0] = analog / 100 + 0x30;
+	analog = (int) analog % 100;
+	str2[1] = (int) analog / 10 + 0x30;
+	str2[2] = (int) analog % 10 + 0x30;
+	string(str2, 0x86);
+}
+
+void main (void)
+{
+	OSCCON = 0x43;		// setup internal oscilator 1 MHz
+	ADCON1 = 0x7E;		// select input AN0, enable ADC
+	ADCON1 = 0x0e;		// AN0 is analog, VDD and VSS are references 
+	ADCON2 = 0x84;		
+	TRISA = 1;			// Port A bit 1 = input
+	TRISB = 0;			// Port B = output
+	PORTB = 1;			// Turn off sensor
+
+	initLCD();
+
+	T1CON = 0xF9;		// Timer 1 runs at 32 us per count
+	TMR1L = 0xEE;		// preload Timer 1 with -31,250
+	TMR1H = 0x85;		//	  for an interrupt per second
+
+	RCONbits.IPEN = 0;		// only high priority interrupt on
+	
+	PIE1bits.TMR1IE = 1;	// enable Timer 1 interrupt
+	INTCONbits.GIE = 1;		// enable interrupts
+
+	while (1)
+	{
+		// Nothing
+	}
+}

@@ -1,0 +1,46 @@
+;*************** SubAdd Function ***************
+;
+; uses 1 program stack level
+; uses 2 data stack levels
+; uses FSR0, FSR1, PRODL, and PRODH
+;
+; Adds/subtracts the packed BCD number addressed by number
+; 	addressed by FSR0 to or from the number addressed by
+;	FSR1.  Result replaces number at FSR0.
+;
+; CALLING parameters:  
+;	FSR0 = address of number1 and result
+;	FSR1 = address of number2
+;	PRODL = number of bytes in each number
+;	PRODH = 0x00 (addition) or 0x9A (subtraction) 
+; 
+
+SubAdd:
+	MOVFF	WREG, POSTDEC2	;stack WREG
+	MOVFF	TABLAT, POSTDEC2	;stack TABLAT
+	
+	BCF	STATUS, 0		;clear carry
+SubAdd1:
+	MOVFF	STATUS, TABLAT
+	MOVF	POSTINC0, 0
+
+	TSTFSZ	PRODH
+	SUBWF	PRODH, 0
+
+	MOVFF	TABLAT, STATUS
+	ADDWFC	POSTINC1, 0
+	DAW
+	MOVWF	POSTINC2
+	MOVLW	0x99
+
+	TSTFSZ	PRODH
+	MOVWF	PRODH
+
+	DECFSZ	PRODL
+	BRA	SubAdd1	
+
+	MOVFF	PREINC2, TABLAT	;un-stack TABLAT
+	MOVFF	PREINC2, WREG		;un-stack WREG
+
+	RETURN
+

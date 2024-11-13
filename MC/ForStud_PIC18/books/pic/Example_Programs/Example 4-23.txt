@@ -1,0 +1,90 @@
+;
+;************** Wait4Clock *****************
+;
+;  Waits for the clock to go low and then high
+;	before returning
+;
+	
+Wait4Clock:
+	BTFSC	PORTA, 1	;test RA1
+	BRA	Wait4Clock	;if clock = 1
+
+Wait4Clock1:
+	BTFSS	PORTA, 1	;test RA1
+	BRA	Wait4Clock1	;if clock = 0
+
+	RETURN	
+
+
+;************** GetData ****************
+; 
+; uses 2 program stack levels
+;
+; uses PRODL, PRODH, and TABLAT
+;
+; Reads character from the keyboard and return it in WREG
+;
+;	error = carry set
+
+GetData:
+	CALL	Wait4Clock	;wait for initial clock
+
+	BTFSS	PORTA, 0	;test RA0
+	BRA	GetData1	;if data is start bit GOTO GetData1
+
+	BSF	STATUS, 0	;if not valid start, set CARRY
+
+	RETURN			;and return
+;
+; program continues at this point if a valid start bit is detected
+;	PRODL is used as a data bit counter
+;	PRODH is used to count the ones in the data stream for parity
+;
+
+GetData1:			
+	MOVLW	8
+	MOVWF	PRODL		;set count of 8
+	CLRF	PRODH		;clear parity count
+
+GetData2:
+	CALL	Wait4Clock	;wait for a data bit clock
+
+	BTFSC	PORTA, 0	;test RA0
+	INCF	PRODH		;count a one parity bit
+				;and clear CARRY
+
+	BTFSC	PORTA, 0	;test RA0
+	SETF	STATUS, 0	;set carry if data = 1
+
+	RRCF	TABLAT		;rotate carry (data bit) into TABLAT
+
+	DECF	PRODL		;decrement count
+	BNZ	GetData2	;repeat 8 times for the 8 data bits
+
+	CALL	Wait4Clock	wait for parity bit clock
+
+	MOVF	PORTA, W	;get data bit to WREG
+	
+	XORWF	PRODH		;exclusive or with parity count
+	BTFSS	PRODH, 0
+	BRA	GetData3	;if parity good
+	
+	BSF	STATUS,0	;if parity error set CARRY
+
+	RETURN
+
+GetData3:			;if no parity error
+	CALL	Wait4Clock
+
+	BTFSC	PORTA, 0	;test RA0 for stop bit
+	BRA	GetData4	;if good stop bit
+
+	BSF	STATUS, 0	;if framing error set CARRY
+
+	RETURN
+
+GetData4:			;if no errors
+	MOVF	TABLAT, W	;get data byte to WREG
+	BCF	STATUS, 0	;clear CARRy
+
+	RETURN

@@ -1,0 +1,95 @@
+/*
+ * Priority of multiple interrupts
+ */
+
+#include <p18cxxx.h>
+
+/* Set configuration bits
+ *  - set RC oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = RC
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+void MyHighInt(void);
+
+#pragma interrupt MyHighInt
+#pragma code high_vector=0x08
+
+void high_vector(void)
+{
+	_asm GOTO MyHighInt _endasm
+}
+
+#pragma code
+
+void Int0(void)
+{
+	INTCONbits.INT0IF = 0;  	// clear INT0IF flag
+	// do INT0 software here
+}
+
+void Int1(void)
+{
+	INTCON3bits.INT1IF = 0;	// clear INT1IF flag
+	// do INT1 software here
+}
+
+void Int2(void)
+{
+	INTCON3bits.INT2IF = 0;	// clear INT2IF flag
+	// do INT2 software here
+}
+
+void MyHighInt(void)		// polling interrupt inputs
+{
+	if ( INTCONbits.INT0IF == 1 )
+	 	Int0();			// highest priority
+
+	else if ( INTCON3bits.INT1IF == 1 )
+		Int1();			// next to highest priority
+
+	else if ( INTCON3bits.INT2IF == 1 )
+		Int2();			// lowest priority
+}
+
+// main program
+
+void main (void)
+{
+
+	ADCON1 = 0x7F;		// make ports pins digital
+	TRISB = 7;			// make RB0, RB1, and RB2 inputs
+
+	RCONbits.IPEN = 1;		// IPEN = 1
+
+	INTCON2bits.INTEDG0 = 0;	// make INT0 negative edge-triggered
+	INTCON2bits.INTEDG1 = 0;	// make INT1 negative edge-triggered
+	INTCON2bits.INTEDG2 = 0;	// make INT2 negative edge-triggered
+
+	INTCON3bits.INT1IP = 1;	// make INT1 high priority
+	INTCON3bits.INT2IP = 1;	// make INT2 high priority
+
+	INTCONbits.INT0IE = 1;	// enable INT0
+	INTCON3bits.INT1IE = 1;	// enable INT1
+	INTCON3bits.INT2IE = 1;	// enable INT2
+
+	INTCONbits.GIEH = 1;	// enable high priority interrupts
+
+	// do other initialization
+
+	while (1)
+	{
+
+		// main program loop
+
+	}
+}
+

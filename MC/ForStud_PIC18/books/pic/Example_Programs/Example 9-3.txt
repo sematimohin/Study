@@ -1,0 +1,79 @@
+/*
+ * Cat litter box
+ */
+
+#include <p18cxxx.h>
+#include <delays.h>
+
+/* Set configuration bits
+ *  - set RC oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = INTIO2
+#pragma config WDT = ON
+#pragma config WDTPS = 256		// one minute
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+#pragma code
+
+void main (void)
+{
+	unsigned int count, count1;
+	OSCCON = 0x22;		// 250 KHz internal clock
+	ADCON1 = 0x7F;		// all inputs are digital
+	TRISA = 0;
+	TRISB = 0x3F;			// program Port B 
+	PORTB = PORTA = 0;		// motor stop
+
+	while (1)
+	{
+		while ( PORTBbits.RB1 == 1 )
+		{
+			PORTB = 0x80;		// Home comb
+			ClrWdt();
+		}
+		PORTB = PORTA = 0;		// Stop motor & alarm
+		while ( PORTBbits.RB4 == 0 )	// Wait for cat
+			ClrWdt();
+		while ( PORTBbits.RB4 == 1 )	// Wait for cat to leave
+			ClrWdt();
+		count = 0;
+		do
+		{
+			count++;
+			ClrWdt();
+			Delay1KTCYx(3);		// 12 ms
+			if ( PORTBbits.RB4 == 0 )
+				count = 0;
+		}
+		while ( count != 50000 ); 		// 10 minutes
+			count = count1 = 0;
+		while ( PORTBbits.RB3 == 1 )
+		{					// Run comb to End
+			count++;
+			PORTB = 0xC0;
+			Delay1KTCYx(3);
+			ClrWdt();
+			if ( count == 417 )		// 5 sec (must be stuck)
+			{
+				PORTB = 0x80;
+				count = 0;
+				count1++;
+				Delay1KTCYx(255);	// give it a bump
+			}
+			if ( count1 == 30 )		// set off alarm after
+			{
+				PORTA = 1;		// 30 bumps
+				break;			// then give up
+			}
+		}
+		PORTB = 0;				// Stop motor
+	}
+}
+

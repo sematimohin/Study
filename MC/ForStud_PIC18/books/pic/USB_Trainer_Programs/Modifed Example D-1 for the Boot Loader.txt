@@ -1,0 +1,290 @@
+#include <p18f4550.h>
+#include <timers.h>
+#include <lcd.h>
+
+/* 	The initial test program for the project 
+	Copyright (c) 2006 by Barry B. Brey 
+		
+			requires: 	
+				  	timers.h
+					lcd.h
+*/
+
+// 			setup configuration bits
+//	 instruction clock is 16 MHz / 4 MHz (250 ns)
+
+#pragma config WDT = ON				// spot on
+#pragma config WDTPS = 32768		// watchdog count (131 seconds)
+#pragma config BOR = OFF			// brown-out voltage
+#pragma config MCLRE = ON			// master clear on
+
+#pragma config PLLDIV = 4			// clock for full speed USB
+#pragma config FOSC = ECPLLIO_EC	// PIC clock is 48 MHz
+#pragma config CPUDIV = OSC1_PLL2	// External Oscillator with PLL
+
+void HighInt(void);					// prototypes
+
+extern void _startup (void);        // See c018i.c in your C18 compiler dir
+
+#pragma code _RESET_INTERRUPT_VECTOR = 0x000800
+void _reset (void)
+{
+    _asm goto _startup _endasm
+}
+#pragma interrupt HighInt 
+#pragma code _HIGH_INTERRUPT_VECTOR = 0x000808
+void _high_ISR (void)
+{
+	_asm goto HighInt _endasm	// goto high software
+}
+// 	program memory constants	
+
+// keyboard lookup table
+
+rom near char keyLookUp[] = { 0, 7, 4, 1,	// may need to be changed
+				  15, 8, 5, 2,				// to match your keypad 
+				  14, 9, 6, 3,
+				  13, 12, 11, 10 };
+
+// system messages
+
+rom near char mes1[] = "     Set Hours:     ";
+rom near char mes2[] = "    Set Minutes:    ";
+rom near char mes3[] = "  0=24hr or 1=12hr  ";
+rom near char mes4[] = " The PIC4550 rules! ";
+rom near char mes5[] = "                    ";
+                        
+// 	global data memory variables  
+
+int milli;				// clock
+char seconds;			
+char minutes;
+char hours;
+
+char portDbuffer;		// PORTD buffer
+char buffer[21];		// LCD display line buffer
+char displayTimeFlag;	// Display time flag
+char timeFormat;		// 0 = 24 hour, 1 = 12 hour
+int delayms;			// 1 ms delay
+char delaySec;			// seconds delay
+
+#pragma code			// code starts here
+
+void DelayMs(int count)		// up to 64K milliseconds
+{
+	delayms = count;
+	while ( delayms != 0 );
+}
+
+void DelaySec(int count)	// up to 64K seconds
+{
+	delaySec = count;
+	while ( delaySec != 0);
+}
+
+void ShowTime(void)			// display time
+{
+	char temph = hours;
+	portDbuffer = PORTD;	// preserve Port D
+	if ( displayTimeFlag != 0 )	// show time
+	{
+		if ( temph > 12 && timeFormat == 1)	// make AM/PM
+			temph -= 12;
+		else if ( temph == 0 && timeFormat == 1 )
+			temph = 12;
+		buffer[0] = temph/10 | 0x30;
+		if ( buffer[0] == 0x30 )
+			buffer[0] = 0x20; 		// blank leading hour zero;
+		buffer[1] = temph%10 | 0x30;
+		buffer[2] = ':';
+		buffer[3] = minutes/10 | 0x30;
+		buffer[4] = minutes%10 | 0x30;
+		buffer[5] = ':';
+		buffer[6] = seconds/10 | 0x30;
+		buffer[7] = seconds%10 | 0x30;
+		if ( timeFormat == 1 )
+		{
+			buffer[8] = 0x20;
+			if ( hours >= 12 )
+				buffer[9] = 'P';
+			else
+				buffer[9] = 'A';
+			buffer[10] = 'M';
+			buffer[11] = 0;
+			AddrLCD(0xc4);		// display time
+		}
+		else
+		{
+			buffer[8] = 0;
+			AddrLCD(0xc6);
+		}
+		putsLCD(buffer);
+	}
+	PORTD = portDbuffer;
+}
+
+void DoTime(void)
+{
+	milli++;
+	if ( milli == 1000 )
+	{
+		milli = 0;
+		seconds++;
+		if ( delaySec != 0 )	// do second time delay
+			delaySec--;
+		if ( seconds == 60 )
+		{
+			seconds = 0;
+			minutes++;
+			if ( minutes == 60 )
+			{
+				minutes = 0;
+				hours++;
+				if ( hours == 24 )
+					hours = 0;
+			}
+		}	
+	}
+	if ( delayms != 0 )	// do ms time delay
+		delayms--;
+	if ( milli == 0 )	// check for new second
+		ShowTime();
+}
+
+void HighInt(void)		// do interrupts
+{
+	if ( PIR1bits.TMR1IF == 1 )	// do 24 hour clock
+	{
+		PIR1bits.TMR1IF = 0;	// reenable timer 1 interrupt
+		WriteTimer1(-11816);	// reprogram biased count (184)
+		DoTime();				
+	}
+}
+
+char ReadKey(void)
+{
+	char select = 0xef;
+	char col = -4; 
+	char mask = 1;
+	PORTD = 0;
+	do
+	{
+		while ( ( PORTD & 0x0f ) != 0x0f )
+			ClrWdt();
+		DelayMs(12);	// 12 ms
+	} while ( ( PORTD & 0x0f ) != 0x0f );
+	do 
+	{
+		while ( ( PORTD & 0x0f ) == 0x0f )
+			ClrWdt();
+		DelayMs(12);
+	} while ( ( PORTD & 0x0f ) == 0x0f );
+	do
+	{
+		PORTD = select;
+		select <<= 1;
+		col += 4;
+	} while ( ( PORTD & 0x0f ) == 0x0f ); 
+	while ( ( PORTD & mask ) == mask )
+	{
+		col++;
+		mask <<= 1;		
+	}
+	return keyLookUp[col];
+}
+
+void SetTime(char *clock, char maxTensDigit)
+{
+	char temp;
+	do 
+	{
+		clock = 0;
+		ShowTime();
+		temp = ReadKey();
+		if ( temp <= maxTensDigit )
+			clock += temp * 10;
+		ShowTime();
+		temp = ReadKey();
+		if ( temp < 10 )
+			clock += temp;
+		ShowTime();
+		temp = ReadKey();
+	} while ( temp != 13 );
+	AddrLCD(0x80);
+	putrsLCD(mes2);
+}
+
+void InitializeSystem(void)
+{
+	ADCON1 = 0x0f;			// all inputs digital
+	TRISD = 0x0f;			// set up Port D input
+
+	milli = seconds = minutes = hours = 0;	// time = 00:00:00
+	displayTimeFlag = 0;		// don't display time
+	delayms = delaySec = 0; 	// clear delays
+
+	OpenTimer1( TIMER_INT_ON &	// program timer 1
+		      T1_16BIT_RW &
+		      T1_SOURCE_INT &
+		      T1_PS_1_1 &
+		      T1_OSC1EN_OFF &
+		      T1_SYNC_EXT_OFF );
+
+	WriteTimer1(-12000);		// set timer 1 count (1.0 ms)
+
+	RCONbits.IPEN = 1;			// IPEN = 1
+	IPR1bits.TMR1IP = 1;		// make Timer 1 high priority 	PIE1bits.TMR1IE = 1;	// enable timer 1 interrupt
+	INTCONbits.GIEH = 1;		// enable high priority interrupts
+
+	OpenLCD();					// initialize the LCD display
+}
+
+void main(void)
+{
+	char a;
+
+	InitializeSystem();		// setup the PIC
+
+	AddrLCD(0x80);
+	putrsLCD(mes1);
+	timeFormat = 0;
+	displayTimeFlag = 1;
+
+	SetTime(&hours, 2); 	// set hours
+	AddrLCD(0x80);
+	putrsLCD(mes2);
+
+	SetTime(&minutes, 5); 	// set minutes
+	AddrLCD(0x80);
+	putrsLCD(mes3);
+	
+	a = ReadKey();
+	if ( a < 2 )
+		timeFormat = a;
+	AddrLCD(0x80);
+	putrsLCD(mes5);
+	AddrLCD(0xc0);
+	putrsLCD(mes5);
+	ShowTime();
+	
+	for ( a = 0; a < 20; a++ )
+	{
+		AddrLCD(0x80 | a);
+		WriteLCD(mes4[a]);	 
+		DelayMs(160);
+	}
+	for ( a = 0; a < 5; a++ )
+	{
+		AddrLCD(0x80);
+		putrsLCD(mes5);
+		DelayMs(400);		
+		AddrLCD(0x80);
+		putrsLCD(mes4);
+		DelayMs(400);
+	}
+	
+	while(1)
+	{
+		ClrWdt();
+	}
+}

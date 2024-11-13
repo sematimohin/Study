@@ -1,0 +1,126 @@
+
+/*
+ * Speed and direction example written for a PIC18F1220
+ */
+
+#include <p18cxxx.h>
+#include <timers.h>
+
+/* Set configuration bits
+ *  - set HS oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = HS		// assumes a 4 MHz clock
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+void MyHighInt(void);		// prototypes for interrupts
+
+#pragma interrupt MyHighInt	// MyHighInt is an interrupt
+#pragma code high_vector=0x08	// high_vector is the vector at 0x08
+
+void high_vector(void)
+{
+	_asm GOTO MyHighInt _endasm
+}
+
+// data memory data
+
+int speedRPM;			// speed in RPM
+char direction;		// direction 1 = forward
+				//           0 = reverse
+char lastCount;		// most recent positionst be here
+int timer;			// elapsed count
+
+// high prioity interrupt
+#pragma code	
+
+void Timer0(void)
+{
+	char temp = PORTB & 3;
+	WriteTimer0( 0xFC );	// Timer 0 to 252
+
+	OpenTimer0(TIMER_INT_ON & 	// Timer 0 interrupt on
+			T0_8BIT &		// Timer 0 is 16-bits
+			T0_SOURCE_INT &	// Timer 0 clock is internal
+			T0_PS_1_256 );	// Timer 0 prescaler is 256
+	if( lastCount != temp )
+	{
+		switch ( lastCount )
+		{
+			case 0:
+			{
+				if ( temp == 1 )
+					direction = 1;
+				else
+					direction = 0;
+				break;
+			}
+			case 1:
+			{
+				if ( temp == 2 )
+					direction = 1;
+				else
+					direction = 0;
+				break;
+			}
+			case 2:
+			{
+				if ( temp == 0 )
+					direction = 1;
+				else
+					direction = 0;
+				break;
+			}
+			case 3:
+			{
+				if ( temp == 2 )
+					direction = 1;
+				else
+					direction = 0;
+				break;
+			}
+		}	
+		speedRPM = timer / 1.024 * 15;	// number of 90 degree interrupts
+		timer = 0;
+	}
+	else
+		timer++;
+}
+
+void MyHighInt(void)
+{
+	if ( INTCONbits.TMR0IF == 1 )
+		Timer0();	
+}		
+
+// main program
+
+void main (void)
+{	
+	ADCON1 = 0x7f;	// all port pins digital
+	TRISB = 0x00;		// Port B programmed
+
+	lastCount = timer = 0;
+	
+	WriteTimer0( 0xFC );	// Timer 0 to 252
+
+	OpenTimer0(TIMER_INT_ON & 	// Timer 0 interrupt on
+			T0_8BIT &		// Timer 0 is 16-bits
+			T0_SOURCE_INT &	// Timer 0 clock is internal
+			T0_PS_1_256 );	// Timer 0 prescaler is 256
+
+	RCONbits.IPEN = 1;			// IPEN = 1
+	INTCONbits.GIEH = 1;		// enable high priority interrupts
+
+
+	// do other stuff here
+
+}
+

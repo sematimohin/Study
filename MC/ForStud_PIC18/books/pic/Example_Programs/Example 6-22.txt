@@ -1,0 +1,50 @@
+/*
+ * Sampling the 3.3 Volt supply for a PIC18F1220
+ */
+
+#include <p18cxxx.h>
+
+/* Set configuration bits
+ *  - set OSC input external oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = HS
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+#pragma code
+
+float getVoltage(void)
+{
+	ADCON0bits.GO = 1;	//start a conversion
+	
+	while ( ADCON0bits.GO == 1 );	// wait for completion
+	
+	return ( ADRESL + ( ADRESH << 8 ) ) * 0.00489;	
+}
+
+// main program
+
+void main (void)
+{
+	ADCON0 = 0x7E;		// select input AN0, enable ADC
+	ADCON1 = 0x0e;		// AN0 is analog, VDD and VSS are references 
+	ADCON2 = 0x8C;		// convert using 1 MHz 
+
+	TRISA = 1;			// Port A bit 1 = input
+
+	while (1)
+	{
+		if ( getVoltage() > 3.465 || getVoltage() < 3.135 )
+			PORTAbits.RA1 = 1;		// alarm on
+		else
+			PORTAbits.RA1 = 0;		// alarm off
+	}
+} 
+

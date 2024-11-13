@@ -1,0 +1,65 @@
+/*
+ * Motor speed control for a PIC18F1220
+ */
+
+#include <p18cxxx.h>
+#include <delays.h>
+
+/* Set configuration bits
+ *  - set HS oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = HS
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+#pragma code
+
+// main program
+
+void Switch( char bitP )	// debounce switches
+{
+	do			// wait for release ( bits == 3 )
+	{
+		while ( ( PORTA & bitP ) != bitP );
+		Delay1KTCYx( 15 );
+	}while( ( PORTA & bitP ) != bitP );
+
+
+	do			// wait for press ( bits != 3 )
+	{
+		while ( ( PORTA & bitP ) == bitP );
+		Delay1KTCYx( 15 );
+	}while( ( PORTA & bitP ) == bitP );
+} 
+
+void main (void)
+{	
+	ADCON1 = 0x7F;		// select al digital signals
+	TRISB = 0;			// Port B is output
+	TRISA = 3;			// Port A bits 0, 1 are input
+
+	T2CON = 1;			// select a prescaler of divide by 4
+	CCP1CON = 0x0C;		// CCP module off, active high output
+	TMR2 = 0;			// clear Timer 2
+	PR2 = 10;			// Timer 2 clears on 10;
+	CCPR1L = 11;			// stop fan (11)
+	T2CONbits.TMR2ON = 1;	// start Timer 2 & PWM
+
+	while ( 1 )
+	{
+		Switch( 3 );	// check & debounce switches
+		if ( PORTAbits.RA0 == 0 )		// UP pressed
+			if ( CCPR1L != 0 )
+				CCPR1L--;
+		else
+			if ( CCPR1L != 11 )		// DOWN pressed
+				CCPR1L++;
+	}
+}

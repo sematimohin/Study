@@ -1,0 +1,89 @@
+/*
+ * Voltmeter written for a PIC18F1220
+ * using a 4 MHz clock
+ */
+
+#include <p18cxxx.h>
+#include <delays.h>
+
+/* Set configuration bits
+ *  - set HS oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = HS
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+// program memory data
+
+rom near char look7[] = // 7-segment lookup table
+{
+	0x3F,		// 0	active high signals
+	0x06,		// 1	x g f e  d c b a
+	0x5B,		// 2
+	0x4F,		// 3
+	0x66,		// 4
+	0x6D,		// 5
+	0x7D,		// 6
+	0x07,		// 7
+	0x7F,		// 8
+	0x6F		// 9
+};
+
+// data memory data
+
+float volts;
+
+#pragma code
+
+// main program
+
+float getVoltage(void)
+{
+	ADCON0bits.GO = 1;	//start a conversion
+
+	while ( ADCON0bits.GO == 1 );	// wait for completion
+
+	return ( ADRESL + ( ADRESH << 8 ) ) * 0.00489;	
+}
+
+void main (void)
+{	
+	char a;
+	char selectPattern;
+
+	ADCON0 = 1;			// select input AN0, enable ADC
+	ADCON1 = 0x0e;		// AN0 is analog, VDD and VSS are references
+					// 	all other Port A and B pins are digital 
+	ADCON2 = 0x8C;		// convert using 1 MHz 
+	TRISA = 0;			// Port A is output
+	TRISB = 0;			// Port B is output
+
+	while	( 1 )		// main loop
+	{
+		volts = getVoltage();		// get voltage
+
+		selectPattern = 0xFC;
+
+		for ( a = 0; a < 4; a++ )		// convert to digits
+		{					// 	and display them
+			PORTA = selectPattern;	// select a digit
+
+			PORTB = look7[ (int) volts ];
+
+			volts -= (int) volts;
+			volts *= 10;
+
+			selectPattern = ( selectPattern << 1 ) | 2;
+
+			Delay1KTCYx(3);		// 3 ms delay
+		}				
+	}
+}
+

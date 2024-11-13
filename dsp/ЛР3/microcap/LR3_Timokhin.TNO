@@ -1,0 +1,186 @@
+********************************************************************************
+***                       Micro-Cap 12.2.0.5 (64 bit)                        ***
+***                                                                          ***
+***                                                                          ***
+***                    Transient Analysis of LR3_Timokhin                    ***
+***                           06.11.2024 11:20:41                            ***
+********************************************************************************
+Limits
+======
+Maximum Run Time           0.3m
+Output Start Time (tstart) 0
+Maximum Time Step          0.1u
+Number of Points           1024
+Temperature                Linear 27
+Retrace Runs               1
+Run Options                Normal
+State Variables            Zero
+Operating Point            On
+Operating Point Only       Off
+Auto Scale Ranges          On
+Accumulate Plots           Off
+Fixed Time Step            Off
+Periodic Steady State      Off
+Ignore Expression Errors   Off
+
+
+*****************************************************
+***                Temperature=27                 ***
+*****************************************************
+
+Temperature=27
+
+DC Operating Point Voltages
+===========================
+Node         Voltage  Node         Voltage  Node         Voltage 
+1             0.000   2             0.000   3             0.000  
+4             0.000   5             0.000   6             0.000  
+7             0.000   8             0.000   9             0.000  
+10            0.000   11            0.000   12            0.000  
+13            0.000   14            0.000   15            0.000  
+16            0.000   17            0.000   18            0.000  
+19            0.000   20            0.000   21            0.000  
+22            0.000   23            0.000   24            0.000  
+25            0.000   26            0.000   27            0.000  
+
+
+Operating Point for Devices of Type Resistor
+============================================
+Instance:             X4.R1         X4.R2        X17.R1        X17.R2        X18.R1
+V                    0.000         0.000         0.000         0.000         0.000 
+Power DC Terms:
+PD                   0.000         0.000         0.000         0.000         0.000 
+
+DC Pin Currents:
+Ir                   0.000         0.000         0.000         0.000         0.000 
+
+Device Variables:
+tc1                  0.000         0.000         0.000         0.000         0.000 
+tc2                  0.000         0.000         0.000         0.000         0.000 
+
+
+Instance:            X18.R2        X19.R1        X19.R2        X20.R1        X20.R2
+V                    0.000         0.000         0.000         0.000         0.000 
+Power DC Terms:
+PD                   0.000         0.000         0.000         0.000         0.000 
+
+DC Pin Currents:
+Ir                   0.000         0.000         0.000         0.000         0.000 
+
+Device Variables:
+tc1                  0.000         0.000         0.000         0.000         0.000 
+tc2                  0.000         0.000         0.000         0.000         0.000 
+
+
+Instance:            X21.R1        X21.R2        X29.R1        X29.R2        X30.R1
+V                    0.000         0.000         0.000         0.000         0.000 
+Power DC Terms:
+PD                   0.000         0.000         0.000         0.000         0.000 
+
+DC Pin Currents:
+Ir                   0.000         0.000         0.000         0.000         0.000 
+
+Device Variables:
+tc1                  0.000         0.000         0.000         0.000         0.000 
+tc2                  0.000         0.000         0.000         0.000         0.000 
+
+
+Instance:            X30.R2        X31.R1        X31.R2        X51.R1        X51.R2
+V                    0.000         0.000         0.000         0.000         0.000 
+Power DC Terms:
+PD                   0.000         0.000         0.000         0.000         0.000 
+
+DC Pin Currents:
+Ir                   0.000         0.000         0.000         0.000         0.000 
+
+Device Variables:
+tc1                  0.000         0.000         0.000         0.000         0.000 
+tc2                  0.000         0.000         0.000         0.000         0.000 
+
+
+
+Operating Point for Devices of Type Pulse
+=========================================
+Instance:                V1
+Using model:          PULSE
+V                    0.000 
+Power DC Terms:
+PG                   0.000 
+
+DC Pin Currents:
+ISource              0.000 
+
+
+
+Operating Point for Devices of Type Dependent Source
+====================================================
+Instance:           X14.E1        X38.E1        X42.E1        X43.E1        X44.E1
+V                   0.000         0.000         0.000         0.000         0.000 
+Power DC Terms:
+PG                  0.000         0.000         0.000         0.000         0.000 
+
+DC Pin Currents:
+ISource             0.000         0.000         0.000         0.000         0.000 
+
+
+Instance:           X45.E1        X46.E1        X47.E1        X48.E1        X49.E1
+V                   0.000         0.000         0.000         0.000         0.000 
+Power DC Terms:
+PG                  0.000         0.000         0.000         0.000         0.000 
+
+DC Pin Currents:
+ISource             0.000         0.000         0.000         0.000         0.000 
+
+
+Instance:           X50.E1
+V                   0.000 
+Power DC Terms:
+PG                  0.000 
+
+DC Pin Currents:
+ISource             0.000 
+
+
+
+Operating Point for Devices of Type Function Source
+===================================================
+Instance:            X4.E1        X17.E1        X18.E1        X19.E1        X20.E1
+V                   0.000         0.000         0.000         0.000         0.000 
+Power DC Terms:
+PG                  0.000         0.000         0.000         0.000         0.000 
+
+DC Pin Currents:
+ISource             0.000         0.000         0.000         0.000         0.000 
+
+
+Instance:           X21.E1        X29.E1        X30.E1        X31.E1        X51.E1
+V                   0.000         0.000         0.000         0.000         0.000 
+Power DC Terms:
+PG                  0.000         0.000         0.000         0.000         0.000 
+
+DC Pin Currents:
+ISource             0.000         0.000         0.000         0.000         0.000 
+
+
+
+Operating Point for Devices of Type Laplace Source
+==================================================
+Instance:            X3.E1        X22.E1        X23.E1        X24.E1        X41.E1
+V                   0.000         0.000         0.000         0.000         0.000 
+Power DC Terms:
+PG                  0.000         0.000         0.000         0.000         0.000 
+
+DC Pin Currents:
+ISource             0.000         0.000         0.000         0.000         0.000 
+
+
+At Time= 0.000180866 the following devices failed to converge.
+Laplace Source X3.E1
+Laplace Source X23.E1
+Laplace Source X24.E1
+Laplace Source X41.E1
+Function Source X17.E1
+Function Source X18.E1
+Function Source X19.E1
+Function Source X20.E1
+Function Source X21.E1

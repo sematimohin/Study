@@ -1,0 +1,42 @@
+// Assumes the clock frequency is 2 MHz
+// 	for a instruction clock of 2 us
+
+#define LCD PORTB			// define data port
+#define RS PORTBbits.RB5		// define RS
+#define E PORTBbits.RB4		// define E
+
+
+void SendLCDdata(char data, char rs)
+{
+	LCD = data >> 4;		// send left nibble
+	RS = rs;			// control RS
+	E = 1;				// pulse E
+	E = 0;
+	Delay10TCYx( 2 );		// delay 40 us 
+	LCD = data & 0x0F;		// send right nibble
+	RS = rs;			// control RS
+	E = 1;				// pulse E
+	E = 0; 	
+	Delay10TCYx( 2 );		// delay 40 us 
+
+}
+
+void InitLCD(void)
+{
+	char a;
+
+	Delay1KTCYx(10); 		// wait 20 ms (see text)
+
+	for ( a = 0; a < 4; a++ )
+	{
+		SendLCDdata( 0x30, 0 );	// send 0x30
+		Delay1KTCYx( 3 );		// wait 6 ms
+	}
+
+	SendLCDdata( 0x08, 0 );	// send 0x08
+	SendLCDdata( 0x01, 0 );	// send 0x01
+	Delay1KTCYx( 1 );		// wait 2 ms
+	SendLCDdata( 0x0C, 0 );	// send 0x0C
+	SendLCDdata( 0x06, 0 );	// send 0x06
+}
+

@@ -1,0 +1,632 @@
+
+/*
+ * A home heating/air conditioning thermostat
+ */
+
+#include <p18cxxx.h>
+#include <delays.h>
+#include <timers.h>
+#include <string.h>
+
+/* Set configuration bits
+ *  - set RC oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = INTIO2
+#pragma config WDT = ON
+#pragma config WDTPS = 256		// one second
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+//****************** INTERRUPT VECTORS ***********************
+
+void MyHighInt(void);		// prototype for interrupt
+
+#pragma interrupt MyHighInt	// MyHighInt is an interrupt
+#pragma code high_vector=0x08	// high_vector is the vector at 0x08
+
+void high_vector(void)
+{
+	_asm GOTO MyHighInt _endasm
+}
+
+//****************** DATA MEMORY VARIABLES ********************
+
+short long time;
+char hours;
+char minutes;
+char day;
+char displayTimeFlag;
+char indoor;
+char outdoor;
+char setPoint;
+char timeOut;
+char state;
+
+//******************** PROGRAM MEMORY VARIABLES ******************
+
+char near rom days[][10] = {
+	"Sunday   ",
+	"Monday   ",
+	"Tuesday  ",
+	"Wednesday",
+	"Thursday ",
+	"Friday   ",
+	"Saturday "
+};
+
+char near rom str1[] = "Indoor                  ";	
+char near rom str2[] = "Outdoor                 ";
+char near rom str3[] = "     Set time of day    ";	
+char near rom str4[] = "                        ";
+char near rom str5[] = "     Set day of week    ";
+char near rom str6[] = " Is a Work Day (M - F)? ";
+char near rom str7[] = "   Up = yes, Down = no  "; 
+char near rom str8[] = "Is                      ";
+char near rom str9[] = " a work day?            ";	// some example cases
+char near rom str10[] = "  Normal temperature   ";
+char near rom str11[] = "  Setback temerature   ";
+char near rom str12[] = "  Work day ON 1 time   ";
+char near rom str13[] = "  Work day OFF 1 time  "; 
+char near rom str14[] = "    Night OFF time     ";
+char near rom str15[] = "   Morning ON time     ";                                
+
+//***************** DATA EEPROM ************************************
+
+#define temperature 0	// thermostat temp setting
+#define workday 1		// work day (m-f) = 1
+#define day0 2			// work day = 1, else = 0
+#define day1 3
+#define day2 4
+#define day3 5
+#define day4 6
+#define day5 7
+#define day6 8
+#define normaltemp 9
+#define setbacktemp 10
+#define workdayOn1h 11
+#define workdayOn1m 12
+#define workdayOff1h 13
+#define workdayOff1m 14
+#define nightOffh 15
+#define nightOffm 16
+#define mornOnh 17
+#define mornOnm 18
+
+
+//********************* FUNCTIONS *******************************
+#pragma code
+
+// Reads a data EEPROM location from address
+
+char eeRead(char address)
+{
+	EECON1bits.EEPGD = 0;
+	EEADR = address;
+	EECON1bits.RD = 1;
+	return EEDATA;
+}
+
+// Write a data EEPROM location at address with data
+
+void eeWrite(char address, char data)
+{
+	INTCONbits.GIEH = 0;	
+	EECON1bits.EEPGD = 0;	
+	EECON1bits.WREN = 1;
+	EEADR = address;
+	EEDATA = data;
+	EECON2 = 0x55;
+	EECON2 = 0xAA;
+	EECON1bits.WR = 1;
+	while ( PIR2bits.EEIF == 0 );
+	PIR2bits.EEIF = 0;	
+	EECON1bits.WREN = 0;
+	INTCONbits.GIEH = 1;		
+}
+
+
+void sendNib( char data, char rs )
+{
+	PORTB = data;			// send nibble
+	PORTAbits.OSC2 = rs;		// control RS
+	PORTBbits.RB7 = 1;		// pulse E
+	PORTBbits.RB7 = 0;
+	Delay1TCY();			// delay 64 us
+	Delay1TCY();
+}
+
+void sendLCDdata(char data, char rs)
+{
+	sendNib( data >> 1, rs );
+	sendNib( data << 3, rs );
+}
+
+void initLCD(void)
+{
+	int a;
+	Delay1KTCYx(1); 		// wait 32 ms 
+	for ( a = 0; a < 4; a++ )
+	{
+		sendLCDdata(0x30, 0);	// send 0x30
+		Delay100TCYx(2);		// wait 6.4 ms
+	}
+
+	sendLCDdata(0x08, 0);	// send 0x08
+	sendLCDdata(0x01, 0);	// send 0x01
+	Delay100TCYx(1);		// wait 3.2 ms
+	sendLCDdata(0x0C, 0);	// send 0x0C
+	sendLCDdata(0x06, 0);	// send 0x06
+}
+
+// Display a program memory based string (str) at position
+// 	Line 1 is at positions 0x80 through 0x97
+//	Line 2 is ay positions 0xC0 through 0xD7
+
+// Display a program memory based string (str) at position
+
+void DisplayStringPgm( char position, rom char *str )
+{
+	char ptr = 0;
+	sendLCDdata(position, 0);	// send position
+	while ( str[ptr] != 0 )
+		sendLCDdata(str[ptr++], 1);	// send character
+}
+
+void GetTemp(void)
+{
+	char a;
+	char b, c;
+	PORTAbits.OSC1 = 0;		// CS = 0
+	for ( a = 0; a < 9; a++ )
+	{
+		b <<= 1;
+		c <<= 1;
+		PORTAbits.RA2 = 1;	// SC = 1
+		b |= PORTAbits.RA3;
+		c |= PORTAbits.RA4;
+		PORTAbits.RA2 = 0;	// SC = 0		
+	}
+	for ( a = 0; a < 7; a++ )
+	{
+		PORTAbits.RA2 = 1;	// SC = 1
+		PORTAbits.RA2 = 0;	// SC = 0		
+	}
+	PORTAbits.OSC1 = 1;		// CS = 1
+	if ( c == 0xff )
+		c = 0x80;
+	indoor = b;
+	outdoor = b;
+}
+
+void GetTime(short long *temp)
+{
+	day = *temp / 86400;
+	hours = ( *temp % 86400 ) / 3600;
+	minutes = ( ( *temp % 86400) % 3600 ) / 60;
+}
+
+void PutTime(char place)
+{
+	char temp;
+	sendLCDdata( place, 0 );
+	temp = hours;
+	if ( hours >= 12 )
+		hours -= 12;
+	if ( hours == 0 )
+		hours = 12;
+	if ( hours < 10 )
+		sendLCDdata( ' ', 1 );
+	else
+		sendLCDdata( hours / 10 + 0x30, 1 );
+	sendLCDdata( hours % 10 + 0x30, 1 );
+	sendLCDdata( ':', 1);
+	sendLCDdata( minutes / 10 + 0x30, 1 );
+	sendLCDdata( minutes % 10 + 0x30, 1 );
+	sendLCDdata( ' ', 1 );
+	if ( temp > 11 )
+		sendLCDdata( 'P', 1 );
+	else
+		sendLCDdata( 'A', 1 );
+}
+
+void PutTemp(char where, char temp)
+{
+	sendLCDdata( where, 0 );
+	if ( temp < 0 )
+	{
+		temp = -temp;
+		sendLCDdata( '-', 1 );
+	}
+	if ( temp >= 100 )
+	{
+		sendLCDdata( temp / 100 + 0x30, 1 );
+		temp -= 100;
+	}
+	sendLCDdata( temp / 10 + 0x30, 1 );
+	sendLCDdata( temp % 10 + 0x30, 1 );
+	sendLCDdata( 0xDF, 1 );
+}
+
+void DisplayTimeDate(void)
+{
+	GetTemp();
+	GetTime( &time );
+	DisplayStringPgm( 0x80, str1 );
+	PutTime( 0xD0 );
+	PutTemp( 0x87, indoor );
+	if ( outdoor != -128 )
+	{
+		DisplayStringPgm( 0xC0, str2 );
+		PutTemp( 0xC8, outdoor );
+	}
+	else
+		DisplayStringPgm( 0xC0, str4 );
+}
+
+void DoThermostat(void)
+{
+	GetTime( &time );
+	if ( eeRead( nightOffh ) == hours && 
+		 eeRead( nightOffm ) == minutes )
+		setPoint = eeRead( setbacktemp );
+	else if ( eeRead( mornOnh ) == hours &&
+		      eeRead( mornOnm ) == minutes )
+		setPoint = eeRead ( normaltemp );
+	else if ( eeRead( day0 + day ) == 1 &&
+			  eeRead( workdayOn1h ) == hours &&
+			  eeRead( workdayOn1m ) == minutes )
+		setPoint = eeRead( setbacktemp );  
+	else if ( eeRead( day0 + day ) == 1 &&
+			  eeRead ( workdayOff1h ) == hours &&
+			  eeRead ( workdayOff1m ) == minutes )
+		setPoint = eeRead ( normaltemp );
+	else
+		setPoint = eeRead ( normaltemp );
+	if ( outdoor < 65 )
+	{
+		if ( indoor < setPoint )
+		{
+			PORTAbits.RA0 = 1;		// heat on
+			PORTAbits.RA1 = 0; 
+		}
+		else
+		{
+			PORTAbits.RA0 = 0;		// heat off
+			PORTAbits.RA1 = 0; 
+		}
+	}
+	else
+	{	
+		if ( indoor > setPoint )
+		{
+			PORTAbits.RA0 = 0;
+			PORTAbits.RA1 = 1;		// air on
+		}
+		else
+		{
+			PORTAbits.RA0 = 0;		// air off
+			PORTAbits.RA1 = 0; 
+		}
+	}
+}
+
+void MyHighInt(void)
+{	
+	if (PIR1bits.TMR1IF == 1 )	// do clock
+	{						// as 24 hour clock
+		PIR1bits.TMR1IF = 0;
+		WriteTimer1( -31250 );
+		time++;
+		if ( timeOut != 0 )
+			timeOut--;
+		if ( time == 604800 )
+			time = 0;
+		if ( displayTimeFlag == 1 && time % 60 == 0 )
+		{
+			DisplayTimeDate();
+			DoThermostat();
+		}
+	}
+}
+
+char GetKey(void)
+{
+	do
+	{
+		while ( ( PORTB & 7 ) != 7 )
+		{
+			ClrWdt();
+			Delay100TCYx(5);
+			if ( timeOut == 0 )
+				return 7;
+		}
+	}
+	while ( ( PORTB & 7 ) != 7 );
+	do
+	{
+		while ( ( PORTB & 7 ) == 7 )
+		{
+			ClrWdt();
+			Delay100TCYx(5);
+			if ( timeOut == 0 )
+				return 7;
+		}
+	}
+	while ( ( PORTB & 7 ) == 7 );
+	return 0;
+}
+
+void GotKey(void)
+{
+	int a;
+	short long b;
+	Delay100TCYx(5);	// 16 ms
+	if ( ( PORTB & 7 ) != 3 )
+		return;					// ignore all but select
+	displayTimeFlag = 0;
+	DisplayStringPgm( 0x80, str3 );
+	DisplayStringPgm( 0xC0, str4 );
+	timeOut = 5;
+	while ( GetKey() == 0 )
+	{	
+		timeOut = 5;
+		switch ( state )
+		{
+			case 0:
+			{
+				GetTime( &time );
+				PutTime( 0xC8 );
+				if ( PORTBbits.RB0 == 0 )
+				{
+					time++;
+					if ( time > 604800 )
+						time = 0;
+				}
+				else if ( PORTBbits.RB1 == 0 )
+				{
+					time--;
+					if ( time < 0 )
+						time = 604799;
+				}
+				else if ( PORTBbits.RB2 == 0 )
+				{
+					state = 1;
+					DisplayStringPgm( 0x80, str5 );
+					DisplayStringPgm( 0xC0, str4 );
+					a = 0;					
+				}
+				break;
+			}
+			case 1:
+			{
+				a &= 7;
+				DisplayStringPgm( 0xC9, days[a] );
+				if ( PORTBbits.RB0 == 0 )
+					a++;
+				else if ( PORTBbits.RB1 == 0 )
+					a--;
+				else if ( PORTBbits.RB2 == 0 )
+				{
+					time = time % 86400 + a * 86400;
+					state = 2;
+					DisplayStringPgm( 0x80, str6 );
+					DisplayStringPgm( 0xC0, str7 );			
+				}
+				break;
+			}
+			case 2:
+			{
+				if ( PORTBbits.RB0 == 0 )
+				{
+					eeWrite( workday, 1 );
+					state = 4;
+					DisplayStringPgm( 0x80, str10 );
+					DisplayStringPgm( 0xC0, str4 );			
+					a = indoor;
+				}
+				else if ( PORTBbits.RB1 == 0 )
+				{
+					eeWrite( workday, 0 );
+					state = 3;
+					a = 0;
+					DisplayStringPgm( 0x80, str8 );
+					DisplayStringPgm( 0xC0, str7 );			
+				}	
+				break;			
+			}
+			case 3:
+			{
+				DisplayStringPgm( 0x83, days[a] );
+				DisplayStringPgm( 0x83 + strlenpgm( days[a] ), 
+						     str9 );
+				if ( PORTBbits.RB0 == 0 )
+					eeWrite( day0 + a, 1 );
+				else if ( PORTBbits.RB1 == 0 )
+					eeWrite( day0 + a, 1 );
+				else
+					a--;
+				a++;
+				if ( a == 8 )
+				{
+					state = 4;
+					DisplayStringPgm( 0x80, str10 );
+					DisplayStringPgm( 0xC0, str4 );
+					a = indoor;							
+				}	
+				break;			 
+			}
+			case 4:
+			{
+				PutTemp( 0xCA, a );
+				if ( PORTBbits.RB0 == 0 )
+				{
+					a++;
+					if ( a >= 100 )
+						a--;
+				}
+				else if ( PORTBbits.RB1 == 0 )
+				{
+					a--;
+					if ( a <= 49 )
+						a++;
+				}
+				else if ( PORTBbits.RB2 == 0 )
+				{
+					eeWrite( normaltemp, a );
+					state = 5;
+					DisplayStringPgm( 0x80, str11 );
+					DisplayStringPgm( 0xC0, str4 );		
+				}
+				break;
+			}
+			case 5:
+			{
+				PutTemp( 0xCA, a );
+				if ( PORTBbits.RB0 == 0 )
+				{
+					a++;
+					if ( a >= 100 )
+						a--;
+				}
+				else if ( PORTBbits.RB1 == 0 )
+				{
+					a--;
+					if ( a <= 49 )
+						a++;
+				}
+				else if ( PORTBbits.RB2 == 0 )
+				{
+					eeWrite( setbacktemp, a );
+					state = 6;
+					DisplayStringPgm( 0x80, str12 );
+					DisplayStringPgm( 0xC0, str4 );
+					b = 0;		
+				}
+				break;
+			}
+			case 6:
+			{
+				GetTime( &b );
+				PutTime( 0xC8 );
+				if ( PORTBbits.RB0 == 0 )
+				{
+					time++;
+					if ( time > 604800 )
+						time = 0;
+				}
+				else if ( PORTBbits.RB1 == 0 )
+				{
+					time--;
+					if ( time < 0 )
+						time = 604799;
+				}
+				else if ( PORTBbits.RB2 == 0 )
+				{
+					state = 7;
+					DisplayStringPgm( 0x80, str13 );
+					DisplayStringPgm( 0xC0, str4 );
+					eeWrite( workdayOn1h, hours );
+					eeWrite( workdayOn1m, minutes );				
+				}
+				break;
+			}
+			case 7:
+			{
+				GetTime( &b );
+				PutTime( 0xC8 );
+				if ( PORTBbits.RB0 == 0 )
+				{
+					time++;
+					if ( time > 604800 )
+						time = 0;
+				}
+				else if ( PORTBbits.RB1 == 0 )
+				{
+					time--;
+					if ( time < 0 )
+						time = 604799;
+				}
+				else if ( PORTBbits.RB2 == 0 )
+				{
+					state = 8;
+					DisplayStringPgm( 0x80, str14 );
+					DisplayStringPgm( 0xC0, str4 );	
+					eeWrite( workdayOff1h, hours );
+					eeWrite( workdayOff1m, minutes );				
+				}
+				break;
+			}
+			case 9:
+			{
+				GetTime( &b );
+				PutTime( 0xC8 );
+				if ( PORTBbits.RB0 == 0 )
+				{
+					time++;
+					if ( time > 604800 )
+						time = 0;
+				}
+				else if ( PORTBbits.RB1 == 0 )
+				{
+					time--;
+					if ( time < 0 )
+						time = 604799;
+				}
+				else if ( PORTBbits.RB2 == 0 )
+				{
+					state = 9;
+					DisplayStringPgm( 0x80, str15 );
+					DisplayStringPgm( 0xC0, str4 );
+					eeWrite( mornOnh, hours );
+					eeWrite( mornOnm, minutes );
+					displayTimeFlag = 1;
+					DisplayTimeDate();
+					return;
+				}
+				break;
+			}
+		}
+	}
+	displayTimeFlag = 1;
+	DisplayTimeDate();
+}
+
+//************************ MAIN STARTUP CODE **************************
+
+void main (void)
+{
+	OSCCON = 0x02;		// 32 us internal clock
+	ADCON1 = 0x7F;		// All inputs are digital
+	TRISA = 0x18;			// Program Port A
+	TRISB = 0x07;			// Program Port B 
+	PORTA = 0x80;
+	PORTB = 7;
+
+	initLCD();
+	displayTimeFlag = 1;
+	DisplayTimeDate();
+
+	INTCON2bits.RBPU = 0;	// Port B pullups on
+
+	OpenTimer1( TIMER_INT_ON &
+		T1_8BIT_RW &
+		T1_SOURCE_INT &
+		T1_PS_1_1 );
+
+	WriteTimer1( -31250 );	// Each second	
+	INTCONbits.GIEH = 1;	// Enable interrupts
+
+	while( 1 )			// stays here until a key
+	{
+		ClrWdt();
+		state = 0;
+		if ( ( PORTB & 7 ) != 7 )
+			GotKey();	
+	}
+}

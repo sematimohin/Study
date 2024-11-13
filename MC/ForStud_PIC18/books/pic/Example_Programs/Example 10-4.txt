@@ -1,0 +1,206 @@
+/*
+ * Boot loader for the PIC18F1220
+ */
+
+// in order for this code to fit into the boot block
+// the linker file was changed to use the c018.o initialization
+// file instead of the C018i.0 file
+//
+// The effect is that no initialized data memory can exist in the 
+// program, which is not a very important feature for most systems.
+
+#include <p18cxxx.h>   
+#include <sw_uart.h>
+#include <delays.h>
+
+/* Set configuration bits
+ *  - set internal oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - master clear enabled
+ */
+#pragma config OSC = HS		// external 4 MHz oscillator
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config MCLRE = ON
+
+// Define EEPROM addresses
+
+#define bootControl 0xFF
+
+// Data memory variable
+
+void MyHighInt(void);		// prototypes
+void MyLowInt(void);
+
+#pragma interrupt MyHighInt	save=PROD					
+#pragma code high_vector=0x08	// high_vector is at 0x0008
+
+void high_vector(void)		// the high prioity vector
+{
+	_asm GOTO MyHighInt _endasm	// goto high software
+}
+
+#pragma interruptlow MyLowInt save=PROD	// MyLowInt is an intettupt
+#pragma code low_vector=0x18	// low_vector is the vector at 0x18
+
+void low_vector(void)
+{
+	_asm GOTO MyLowInt _endasm
+}
+
+#pragma code BootBlock
+
+void NormalReset(void);		// prototype
+
+void DelayTXBitUART(void) 		// 93 us for UART
+{
+	Delay10TCYx(9);
+	Delay1TCY();
+	Delay1TCY();	
+	Delay1TCY();
+}
+
+void DelayRXHalfBitUART(void) 	// 44 us for UART
+{
+	Delay10TCYx(4);
+	Delay1TCY();
+	Delay1TCY();
+	Delay1TCY();	
+	Delay1TCY();
+}
+
+void DelayRXBitUART(void) 		// 91 us for UART
+{
+	Delay10TCYx(9);
+	Delay1TCY();
+}
+
+void main (void)
+{
+	char temp;
+	char command;
+	char length;
+	char addrl;
+	char addrh;
+	char addru;
+	
+	EECON1bits.EEPGD = 0;	// check boot control byte
+	EEADR = bootControl;
+	EECON1bits.RD = 1;
+	if ( EEDATA != 0xFF )	// do normal reset
+	{
+		_asm GOTO NormalReset _endasm
+	}						
+	OpenUART();
+	do
+	{
+		command = ReadUART();
+		length = ReadUART();
+		addrl = ReadUART();
+		addrh = ReadUART();
+		addru = ReadUART();
+		_asm
+			MOVFF addrl,TBLPTRL
+			MOVFF addrh,TBLPTRH
+			MOVLW 0
+			MOVFF WREG,TBLPTRU
+		_endasm
+
+		// read program memory
+		// <01> <len> <addrl> <addrh> <addru>
+		// <data byte(s)> 
+
+		if ( command == 1 )
+		{
+			while ( length != 0 )
+			{
+				_asm			// read program memory
+					TBLRDPOSTINC
+					MOVFF TABLAT,temp
+				_endasm
+				WriteUART( temp );
+				length--;
+			}
+		}
+
+		// write program memory
+		// <02> <len> <addrl> <addrh> <addru>
+		// <data byte(s)>
+		
+		else if ( command == 2 )
+		{
+			while ( length != 0 )
+			{
+				temp = ReadUART();
+				_asm
+					MOVFF temp,TABLAT
+					TBLWTPOSTINC
+				_endasm
+				EECON1bits.EEPGD = 1;	// select program EEPROM
+				EECON1bits.WREN = 1;	// unprotect writing
+				EECON2 = 0x55;		// erase the current byte
+				EECON2 = 0xAA;
+				EECON1bits.WR = 1;		// select a write	
+			}
+		}
+		
+		// normal boot control		
+		// <03> <data> <dummy> <dummy> <dummy>		
+
+		else if ( command == 3 )
+		{
+			EECON1bits.EEPGD = 0;	// select data EEPROM
+			EECON1bits.WREN = 1;	// unprotect writing
+			EEADR = bootControl;	// setup the EEPROM address
+			EEDATA = 0;			// setup the EEPROM data
+			EECON2 = 0x55;		// erase the current byte
+			EECON2 = 0xAA;
+			EECON1bits.WR = 1;		// select a write operation
+			while ( PIR2bits.EEIF == 0 );	// wait until finished
+		}
+	}
+	while ( command != 0 );
+
+}
+
+// any additional code is placed beyond the boot block software! In the code
+// the code block named Main below.
+
+#pragma code Main=0x200
+
+void HighInt(void);
+void LowInt(void);
+
+void MyHighInt(void)
+{
+	_asm GOTO HighInt _endasm
+}
+
+void MyLowInt(void)
+{
+	_asm GOTO LowInt _endasm
+}
+ 
+void NormalReset(void)
+{
+	_asm GOTO MAIN _endsasm
+}
+
+// place no code before this point!
+
+
+void MAIN (void)		// new Main function
+{
+
+}
+
+void HighInt(void)		// the high priority interrupt
+{
+
+}
+
+void LowInt(void)		// the low priority interrupt 
+{
+
+}

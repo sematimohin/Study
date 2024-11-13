@@ -1,0 +1,119 @@
+/*
+	Time Delays and LED control
+	(c) 2006 by Barry B. Brey
+
+	Contains:
+
+	DelayMs( unsigned int count )    	// causes 1 to 64K milliseconds delay
+	DelaySec( unsigned int count )   	// causes 1 to 64K seconds delay
+
+	OpenLCD()				// Open LCD display for use
+	AddrLCD()				// address a display position
+						// 0x80 is line 1, 0xC0 is line 2
+	putsLCD( char *buffer )			// display a character string from RAM
+	putrsLCD( const rom char buffer) 	// display a string from ROM
+	WriteLCD( char data )			// display a single character
+*/
+
+#ifndef __BLCD_H
+#define __BLCD_H
+
+unsigned int delayms;				// ms delay
+unsigned int delaySec;				// seconds delay
+
+# pragma code 
+
+void ShortDelay(void)
+{
+	Nop();					// wait a bit
+	Nop();
+	Nop();
+	Nop();
+	Nop();
+	Nop();
+	Nop();
+	Nop();
+	Nop();
+	Nop();
+}
+
+void DelayMs(unsigned int count)		// up to 64K milliseconds
+{
+	delayms = count;			// delayms changed in DoTime()
+	while ( delayms != 0 );
+}
+
+void DelaySec(unsigned int count)		// up to 64K seconds
+{
+	delaySec = count;			// dalaySec changed in DoTime()
+	while ( delaySec != 0);
+}
+
+void SendLCD(char command, char data )	// internal use
+{
+	char a;
+	PORTEbits.RE0 = command;		// set or clear RS
+	PORTD = data & 0xf0;			// d7 -- d4 to LCD
+	ShortDelay();				// wait a bit
+	PORTEbits.RE1 = 1;			// set E
+	ShortDelay();				// wait a bit
+	PORTEbits.RE1 = 0;			// clear E
+	ShortDelay();
+	PORTD = data << 4;			// d3 - d0 to LCD
+	ShortDelay();				// wait a bit
+	PORTEbits.RE1 = 1;			// set E
+	ShortDelay();				// wait a bit
+	PORTEbits.RE1 = 0;			// clear E
+	for ( a = 0; a < 27; a++ )
+		ShortDelay();			// wait 40 us  
+}
+
+void OpenLCD(void)				// Open LCD
+{	
+	char a;
+	char reset[] = {0x28, 1, 12, 6};	// setup commands
+	TRISE = TRISE & 0xfc;			// RE0 and RE1 are output
+	TRISD = TRISD & 0x0f;			// RD4 - RD7 are output
+	PORTEbits.RE1 = 0;			// Clear E
+	DelayMs(16);				// wait 16 ms (power up time)
+	for ( a = 0; a < 3; a++ )		// send 4 reset commands
+	{
+		SendLCD(0, 0x20);
+		DelayMs(5);			// wait 5 ms
+	}
+	for ( a = 0; a < 4; a++ )		// send setup commands
+	{
+		SendLCD(0, reset[a]);
+		DelayMs(2);
+	}
+}
+
+void AddrLCD(char addr)				// Set Display Address
+{						// line 1 is 0x80 through 0x87
+	SendLCD(0, addr);			// line 2 is 0xc0 through 0xcf 
+}	
+
+void putsLCD(char *buffer)			// Display Data Memory String
+{
+  	while(*buffer) 
+    	{
+    		SendLCD(1, *buffer); 
+        	buffer++;
+    	}
+}
+
+void putrsLCD(const rom char *buffer)		// Display Program Memory String
+{
+	while(*buffer)                  
+    	{
+		SendLCD(1, *buffer);
+    	    	buffer++;              
+    	}
+}
+
+void WriteLCD(char data)			// Display 1 character
+{
+	SendLCD(1, data);
+}
+
+#endif

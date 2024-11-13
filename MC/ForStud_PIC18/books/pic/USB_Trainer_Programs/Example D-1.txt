@@ -1,0 +1,290 @@
+#include <p18f4550.h>
+#include <timers.h>
+#include <blcd.h>
+
+/* 	The initial test program for the EET-387 project 
+	Copyright (c) 2006 by Barry B. Brey
+
+	Version 1.0  ... 4/2/06
+ 
+		requires: 	
+				  	timers.h  .. timer control
+					blcd.h    .. kcd and time delays
+
+		linker:		18f4550.lkr					
+*/
+
+// program configuration bits
+
+#pragma config WDT = ON			// spot, the watchdog turned on
+#pragma config WDTPS = 32768		// watchdog count (131 seconds)
+#pragma config BOR = OFF		// brown-out voltage
+#pragma config MCLRE = ON		// master clear on
+#pragma config PWRT = ON		// power up timer on
+
+#pragma config PLLDIV = 4		// clock for full speed USB
+#pragma config FOSC = ECPLLIO_EC	// PIC USB clock is 48 MHz
+#pragma config CPUDIV = OSC1_PLL2	// External Oscillator with PLL
+
+void HighInt(void);
+
+#pragma interrupt HighInt 
+#pragma code _HIGH_INTERRUPT_VECTOR = 8
+void _high_ISR (void)
+{
+	_asm goto HighInt _endasm	// goto high software
+}
+
+/* 	program memory constants	*/
+
+rom near char keyLookUp[] = { 0, 7, 4, 1,	// May need to change
+				  15, 8, 5, 2,
+				  14, 9, 6, 3,
+				  13, 12, 11, 10 };
+
+rom near char mes1a[] = " The PIC 4550 Demo  ";
+rom near char mes1b[] = "   Test Program     ";
+rom near char mes1c[] = " Enjoy the Project! ";
+rom near char mes1d[] = "(c) 2006 by B. Brey ";
+rom near char mes1[] = "     Set Hours:     ";
+rom near char mes2[] = "    Set Minutes:    ";
+rom near char mes3[] = "  0=24hr or 1=12hr  ";
+rom near char mes4[] = " The PIC4550 rules! ";
+rom near char mes5[] = "                    "; 
+                        
+/* 	global data memory variables  */
+
+				// time of day
+int milli;
+char seconds;
+char minutes;
+char hours;
+
+char buffer[21];		// LCD display line buffer
+char displayTimeFlag;	// Display time flag
+char timeFormat;		// 0 = 24 hour, 1 = 12 hour
+
+#pragma code
+
+void ShowTime(void)
+{	
+	char portDbuffer = PORTD;
+	char temph = hours;
+	if ( displayTimeFlag != 0 )
+	{
+		if ( temph > 12 && timeFormat == 1)		// make AM/PM
+			temph -= 12;
+		else if ( temph == 0 && timeFormat == 1 )
+			temph = 12;
+		buffer[0] = temph/10 | 0x30;
+		if ( buffer[0] == 0x30 )
+			buffer[0] = 0x20; 		// blank leading hour zero;
+		buffer[1] = temph % 10 | 0x30;
+		buffer[2] = ':';
+		buffer[3] = minutes / 10 | 0x30;
+		buffer[4] = minutes % 10 | 0x30;
+		buffer[5] = ':';
+		buffer[6] = seconds / 10 | 0x30;
+		buffer[7] = seconds % 10 | 0x30;
+		if ( timeFormat == 1 )
+		{
+			buffer[8] = 0x20;
+			if ( hours >= 12 )
+				buffer[9] = 'P';
+			else
+				buffer[9] = 'A';
+			buffer[10] = 'M';
+			buffer[11] = 0;
+			AddrLCD(0xc4);			// display time
+		}
+		else
+		{
+			buffer[8] = 0;
+			AddrLCD(0xc6);
+		}
+		putsLCD(buffer);
+	}
+	PORTD = portDbuffer;
+}
+
+void DoTime(void)
+{
+	milli++;
+	if ( milli >= 1000 )
+	{
+		milli = 0;
+		seconds++;
+		if ( delaySec != 0 )
+			delaySec--;
+		if ( seconds >= 60 )
+		{
+			seconds = 0;
+			minutes++;
+			if ( minutes >= 60 )
+			{
+				minutes = 0;
+				hours++;
+				if ( hours >= 24 )
+					hours = 0;
+			}
+		}	
+	}
+	if ( delayms != 0 )
+		delayms--;
+	if ( milli == 0 )
+		ShowTime();
+}
+
+void HighInt(void)		// do interrupts
+{
+	if ( PIR1bits.TMR1IF == 1 )	// do 24 hour clock
+	{
+		PIR1bits.TMR1IF = 0;	// reenable timer 1 interrupt
+		WriteTimer1(-11824);	// reprogram biased count (174)
+		DoTime();				
+	}
+}
+
+char ReadKey(void)
+{
+	char select = 0xef;
+	char col = -4; 
+	char mask = 1;
+	PORTD = 0;
+	do
+	{
+		while ( ( PORTD & 0x0f ) != 0x0f )
+			ClrWdt();
+		DelayMs(15);	// 12 ms
+	} while ( ( PORTD & 0x0f ) != 0x0f );
+	do 
+	{
+		while ( ( PORTD & 0x0f ) == 0x0f )
+			ClrWdt();
+		DelayMs(15);
+	} while ( ( PORTD & 0x0f ) == 0x0f );
+	do
+	{
+		PORTD = select;
+		select <<= 1;
+		col += 4;
+	} while ( ( PORTD & 0x0f ) == 0x0f ); 
+	while ( ( PORTD & mask ) == mask )
+	{
+		col++;
+		mask <<= 1;		
+	}
+	return keyLookUp[col];
+}
+
+void SetTime( char* clock, char maxTensDigit)
+{
+	char temp;
+	do 
+	{
+		*clock = 0;
+		ShowTime();
+		temp = ReadKey();
+		if ( temp <= maxTensDigit )
+			*clock += temp * 10;
+		ShowTime();
+		temp = ReadKey();
+		if ( temp < 10 )
+			*clock += temp;
+		ShowTime();
+		temp = ReadKey();
+	} while ( temp != 13 );
+	AddrLCD(0x80);
+	putrsLCD(mes2);
+}
+
+void InitializeSystem(void)
+{
+	ADCON1 = 0x3f;		// all inputs digital
+	TRISD = 0x0f;		// set up Port D inputs
+
+	milli = seconds = minutes = hours = 0;	// time = 00:00:00
+	displayTimeFlag = 0;	// don't display time
+	delayms = delaySec = 0; 	// clear delays
+	
+	OpenTimer1( TIMER_INT_ON &		// program timer 1
+		      T1_16BIT_RW &
+		      T1_SOURCE_INT &
+		      T1_PS_1_1 &
+		      T1_OSC1EN_OFF &
+		      T1_SYNC_EXT_OFF );
+
+	WriteTimer1(-12000);			// set timer 1 count (1.0 ms)
+	
+	RCONbits.IPEN = 1;		// IPEN = 1
+	IPR1bits.TMR1IP = 1;	// make Timer 1 high priority 
+	INTCONbits.GIEH = 1;	// enable high priority interrupts
+
+	OpenLCD();			// initialize the LCD display
+}
+
+void ShowStrings( const rom char *line1, const rom char *line2, char delay )
+{
+	AddrLCD(0x80);
+	putrsLCD(line1);
+	AddrLCD(0xc0);
+	putrsLCD(line2);
+	DelaySec(delay);
+}
+
+void main(void)
+{
+	char a;
+
+	InitializeSystem();
+
+	ShowStrings( mes1a, mes1b, 5 );
+	ShowStrings( mes1c, mes1d, 5 );
+
+	AddrLCD(0xc0);
+	putrsLCD(mes5);
+
+	AddrLCD(0x80);
+	putrsLCD(mes1);
+	timeFormat = 0;
+	displayTimeFlag = 1;	// Show time
+
+	SetTime(&hours, 2); 	// set hours
+	AddrLCD(0x80);
+	putrsLCD(mes2);
+
+	SetTime(&minutes, 5); 	// set minutes
+	AddrLCD(0x80);
+	putrsLCD(mes3);
+
+	AddrLCD(0x80);
+	putrsLCD(mes3);
+	a = ReadKey();
+	if ( a < 2 )
+		timeFormat = a;
+	AddrLCD(0x80);
+	putrsLCD(mes5);
+	AddrLCD(0xc0);
+	putrsLCD(mes5);
+	ShowTime();
+	for ( a = 0; a < 20; a++ )
+	{
+		AddrLCD(0x80 | a);
+		WriteLCD(mes4[a]);	 
+		DelayMs(150);
+	}
+	for ( a = 0; a < 5; a++ )
+	{
+		AddrLCD(0x80);
+		putrsLCD(mes5);
+		DelayMs(400);		
+		AddrLCD(0x80);
+		putrsLCD(mes4);
+		DelayMs(400);
+	}
+	while(1)
+	{
+		ClrWdt();		// Keep spot happy
+	}
+}
+

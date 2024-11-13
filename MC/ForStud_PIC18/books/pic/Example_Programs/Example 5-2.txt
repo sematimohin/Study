@@ -1,0 +1,35 @@
+/*
+ * This is a modified Example 5-1
+ * 	written for the PIC18F1220
+ */
+
+#include <p18cxxx.h>   /* for TRISB and PORTB declarations */
+
+/* Set configuration bits for use with ICD2 / PICDEM2 PLUS Demo Board:
+ *  - set HS oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ */
+
+#pragma config OSC = HS
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+
+
+int counter;
+
+void main (void)
+{
+	ADCON1 = 0x7F;	// make ports digital
+    
+ 	TRISB = 0;    	/* configure PORTB for output */
+	while ( 1 )
+	{
+		counter = 0;
+    		while (counter <= 15)
+    		{
+       		PORTB = counter;   // counter sent to LEDs 
+      			counter++;
+ 	   	}
+	}
+}

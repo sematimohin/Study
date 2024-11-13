@@ -1,0 +1,441 @@
+/*
+ * Elevator car controller software
+ */
+
+#include <p18cxxx.h>
+#include <delays.h>
+#include <ECAN.h>
+#include <spi.h>
+#include <timers.h>
+
+/* Set configuration bits
+ *  - set HS oscillator
+ *  - disable watchdog timer
+ *  - disable low voltage programming
+ *  - disable brownout reset
+ *  - enable master clear
+ */
+
+#pragma config OSC = HSPLL	// 32 MHz
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config BOR = OFF
+#pragma config MCLRE = ON
+
+// program memory speech 
+// room for 10 one second spoken words sampled at 2048 Hz
+//
+// Audio must be sample with a minimum level of 1.4 V and a 
+// maximum level of 3.6 V for the DAC to function correctly.
+//		Audio file to be added by user in the speech array
+//
+// 0 = Basement"
+// 1 = "First Floor"
+// 2 = "Second Floor"
+// 3 = "Third Floor"
+// 4 = "Forth Floor"
+// 5 = Fifth Floor"
+// 6 = "Close the Door"
+// 7 = "Going Up"
+// 8 = "Going Down"
+// 9 = "Initializing"
+
+rom near char speech[10][2048]; 
+
+rom near char keyt[] = 
+{
+	5, 3, 1, 6, 4, 2, 0, 7
+};
+
+
+void MyHighInt(void);		// prototypes
+
+// data memory variables
+
+unsigned char fifo[16];
+unsigned char fifoINP;
+unsigned char fifoOUTP;
+unsigned char SPIbusy;
+unsigned char speak;
+unsigned int speechCounter;
+unsigned int timeDelayCounter;
+unsigned char door;
+unsigned char callFloor[6];
+unsigned char data[1];
+unsigned char dataLen;
+unsigned currentFloor;
+unsigned int barcode[6];
+unsigned char barcodePtr;
+unsigned char carMoving;		// 1 = up, 2 = down, 0 = stop
+char callDirection;				// 1 = up, 2 = down, 0 = idle
+char state;
+
+#pragma interrupt MyHighInt	save=PROD					
+#pragma code high_vector=0x08	// high_vector is at 0x0008
+
+void high_vector(void)		// the high prioity vector
+{
+	_asm GOTO MyHighInt _endasm	// goto high software
+}
+
+#pragma code
+
+void DoOptical(void);
+void DoTimer1(void);
+void DoSPI(void);
+
+void MyHighInt(void)	// new fixed high interrupt vector
+{
+	if ( INTCONbits.INT0IF = 1 )	// if optical reader
+		DoOptical();  
+	else if (PIR1bits.TMR1IF == 1 )	// if timer 1
+		DoTimer1();
+	else if ( PIR1bits.SSPIF == 1 )	// if SPI 
+		DoSPI();
+}
+
+void SendFloor(void)
+{
+	unsigned char floor[1];
+	floor[0] = currentFloor;
+	while ( !ECANSendMessage( 1,
+				 floor,
+				 1,
+				 ECAN_TX_STD_FRAME ) );
+}
+
+void WriteFifo(unsigned char data)
+{
+	if ( fifoINP == fifoOUTP && SPIbusy == 0 )
+	{
+		SPIbusy = 1;
+		WriteSPI( data );
+	}
+	else
+	{
+		fifo[ fifoINP++ ] = data;
+		fifoINP &= 15;
+	}
+}
+
+unsigned int ReadFifo(void)
+{
+	unsigned int retval = 0x100;
+	if ( fifoINP != fifoOUTP )
+	{
+		retval = fifo[ fifoOUTP++ ];
+		fifoOUTP &= 15;
+	}
+	return retval;
+}
+
+void DoSPI(void)
+{
+	unsigned int data = ReadFifo();
+	PIR1bits.SSPIF == 0;
+	if ( data != 0x100 )
+		WriteSPI( data );
+}
+
+void DoOptical(void)
+{
+	INTCONbits.INT0IF = 0;
+	if ( barcodePtr != 0 )
+		barcode[barcodePtr] = ReadTimer0();
+	WriteTimer0( 0 );
+	barcodePtr++;
+}
+
+void DoTimer1(void)
+{
+	PIR1bits.TMR1IF == 0;
+	WriteTimer1( -488 );
+	if ( speak != 0 )
+	{
+		WriteFifo( 0x90 );			// speak!
+		WriteFifo( 0x00 );
+		WriteFifo( speech[ speak ][ speechCounter++ ] );
+		if ( speechCounter == 2047 )
+			speak = speechCounter = 0;
+	}
+	if ( timeDelayCounter != 0 )	// 1/2048 Hz increments
+		timeDelayCounter--;
+	if ( door == 1 && PORTBbits.RB1 == 0 )
+	{
+		PORTAbits.RA2 = 0;
+		door = 0;
+	}
+	else if ( door == 2 && PORTEbits.RE2 == 0 )
+	{
+		PORTAbits.RA1 = 0;
+		door = 0;
+	}
+}
+
+void CloseDoor(void)
+{
+	while ( door != 0 );	// wait for door to stop
+	PORTAbits.RA2 = 1;		// close door
+	door = 1;
+}
+
+void OpenDoor(void)
+{
+	while ( door != 0 );	// wait for door to stop
+	PORTAbits.RA1 = 1;		// open door
+	door = 2;
+}
+
+void CheckButtons(void)
+{
+	char but = 0;
+	char mask = 0x10;
+	PORTC &= 0xFC;
+	if ( ( PORTC & 0xF0 ) != 0xF0 )
+	{
+		Delay1KTCYx(140);
+		if ( ( PORTC & 0xF0 ) != 0xF0 )
+		{
+			PORTC != 1;
+			if ( ( PORTC & 0xF0 ) == 0xF0 )
+			{
+				PORTC != ( PORTC & 0xFC ) | 2;
+				but += 4;
+			}
+			while ( ( PORTC & mask ) == mask )
+			{
+				mask <<= 1;
+				but++;
+			}
+			but = keyt[but];
+			if ( but == 6 )
+			{
+				OpenDoor();
+				timeDelayCounter = 2048 * 5;	// 5 sec
+			}
+			else if ( but == 7 )
+				CloseDoor();
+			else	
+				callFloor[ but ] |= 4;
+		}
+	}
+}
+
+// callFloor data:
+// 	0 = no call
+//  1 = call remote up
+//  2 = call remote down
+//  4 = call local
+
+void CheckCAN(void)
+{
+	ECAN_RX_MSG_FLAGS flags;
+	if ( ECANReceiveMessage(0, data, &dataLen, &flags) )
+	{
+		if ( ( data[0] & 0x80 ) == 0x80 )
+			callFloor[ data[0] & 0x7F ] |= 1;
+		else
+			callFloor[ data[0] ] |= 2;
+	}
+}
+
+void LevelCar(void)
+{
+	if ( carMoving == 1 )
+	{
+		barcodePtr = 0;
+		PORTAbits.RA3 = 1;
+		while (barcodePtr == 0 );
+		PORTAbits.RA3 = 0;
+		barcodePtr = 0;
+		PORTAbits.RA4 = 1;
+		while (barcodePtr == 0 );
+		PORTAbits.RA4 = 0;
+		barcodePtr = 0;
+		PORTAbits.RA3 = 1;
+		while (barcodePtr == 0 );
+		PORTAbits.RA3 = 0;
+	}
+	else
+	{
+		barcodePtr = 0;
+		PORTAbits.RA4 = 1;
+		while (barcodePtr == 0 );
+		PORTAbits.RA4 = 0;
+		barcodePtr = 0;
+		PORTAbits.RA3 = 1;
+		while (barcodePtr == 0 );
+		PORTAbits.RA3 = 0;
+		barcodePtr = 0;
+		PORTAbits.RA4 = 1;
+		while (barcodePtr == 0 );
+		PORTAbits.RA4 = 0;
+	}
+}
+
+unsigned char ReadBarcode(void)
+{
+	char a;
+	unsigned int b = 0xFFFF;
+	for ( a = 0; a < 3; a++ )
+		if ( barcode[a] < b )
+			b = barcode[a];
+	b *= 3;
+	a = 0;
+	if ( barcode[0] > b )
+		a |= 4;
+	if ( barcode[1] > b )
+		a |= 2;
+	if ( barcode[2] > b )
+		a |= 1;
+	a--;
+	return a;
+}
+
+void DoElevator(void)
+{
+	char a;
+	if ( state == 0 )
+	{
+		for ( a = 0; a < 6; a++ )
+			if ( callFloor[a] != 0 )
+				break;
+		if ( a != 6 )
+		{
+				if ( currentFloor < a )
+				{
+					PORTAbits.RA4 = 1;		// move car up
+					callDirection = 1;
+					speak = 7;			// say "Going up"
+				}
+				else
+				{
+					PORTAbits.RA3 = 1;		// move car down
+					callDirection = 2;
+					speak = 8;			// say "Going Down"
+				}
+			state = 1;
+			timeDelayCounter = 4092;
+		}
+	}
+	else if ( state == 1 )
+	{
+		barcodePtr = 0;
+		state = 2;
+	}
+	else if ( state == 2 )
+	{
+		if ( barcodePtr == 4 )
+		{
+			if ( ReadBarcode() == a )
+			{
+				currentFloor = a;
+				callFloor[a] = 0;
+				PORTAbits.RA4 = 0;
+				PORTAbits.RA3 = 0;
+				LevelCar();
+				OpenDoor();
+				speak = a;		// say floor number
+			}
+			else
+			state = 3;
+		}
+	}
+	else if ( state == 3 );
+	{
+		state = 1;
+		timeDelayCounter = 4096;
+	}
+}
+
+void FindFloor(void)
+{
+	unsigned char flr[1];
+	PORTAbits.RA4 = 1;		// move car up
+	timeDelayCounter = 4096;	// 2 seconds
+	while ( timeDelayCounter != 0 );	//wait
+	PORTAbits.RA4 = 0;		// stop car
+	barcodePtr = 0;
+	PORTAbits.RA3 = 1;		// move car down
+	while ( barcodePtr != 4 );	// wait for barcode
+	flr[0] = ReadBarcode();
+	while ( !ECANSendMessage( 0,
+				 flr,
+				 1,
+				 ECAN_TX_STD_FRAME ) );
+	PORTAbits.RA3 = 0;		// stop car
+	carMoving = 2;
+	LevelCar();
+	speak = flr[0];			// say floor number
+	currentFloor = flr[0];
+	carMoving = 0;
+}
+
+void main (void)
+{	
+	char a;
+	ADCON1 = 0x7F;		// select digital I/O
+	TRISA = 0;			// program Port A
+	TRISB = 0xFB;		// program Port B
+	TRISC = 0;			// program Port C
+	TRISD = 0;			// program Port D
+	TRISE = 4;			// program Port E
+
+	PORTA = PORTC = PORTD = SPIbusy = speak = 0;
+	timeDelayCounter = speechCounter = door = 0;
+	barcodePtr = carMoving = state = callDirection = 0;
+
+	for ( a = 0; a < 6; a++ )
+		callFloor[a] = barcode[a] = 0;
+
+	ECANInitialize();	// initialize CAN
+
+	INTCON2bits.RBPU = 0;	// Port B pullups on
+
+	OpenTimer1( TIMER_INT_ON &	// 1 us timer
+		T1_16BIT_RW &
+		T1_SOURCE_INT &
+		T1_PS_1_8 );
+
+	WriteTimer1( -488 );		// fire every 488 us
+								// 1/2048 Hz for audio
+
+	OpenTimer0( TIMER_INT_OFF &	// 32 us
+		T0_16BIT &
+		T0_SOURCE_INT &
+		T0_PS_1_256 );
+
+	PIE1bits.SSPIE = 1;			// enable SPI interrupt
+	RCONbits.IPEN = 0;			// only high priority interrupt on
+	INTCON2bits.INTEDG0 = 0;	// make INT0 negative edge triggered
+	INTCONbits.INT0IE = 1;		// enable INT0
+	INTCONbits.GIE = 1;			// Enable interrupts
+	
+	OpenSPI( SPI_FOSC_16, MODE_00, SMPEND );	// configure SPI port pins
+
+	WriteFifo( 0x90 );	// set to noraml mode
+	WriteFifo( 0x01 );
+	WriteFifo( 0x00 );
+
+	WriteFifo( 0x90 );	// speaker off
+	WriteFifo( 0x00 );
+	WriteFifo( 0x00 );
+
+	speak = 9;			// say "Initilizing"
+	CloseDoor();
+	while ( door != 0 );	// wait for door
+	FindFloor();
+	OpenDoor();
+	timeDelayCounter = 2048 * 5;	// 5 sec
+
+	while ( 1 )
+	{
+		CheckButtons();		// see if a local button is pressed
+		CheckCAN();			// see if the CAN has anything
+		if ( timeDelayCounter == 0 )
+		{
+			CloseDoor();
+			DoElevator();		// run the elevator
+		}
+	}
+}
