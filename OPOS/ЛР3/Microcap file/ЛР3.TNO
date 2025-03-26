@@ -1,0 +1,127 @@
+********************************************************************************
+***                       Micro-Cap 12.2.0.5 (64 bit)                        ***
+***                                                                          ***
+***                                                                          ***
+***                        Transient Analysis of ËÐ3                         ***
+***                           15.03.2025 17:22:12                            ***
+********************************************************************************
+Limits
+======
+Maximum Run Time           5m
+Output Start Time (tstart) 0
+Maximum Time Step          0.1u
+Number of Points           51
+Temperature                Linear 27
+Retrace Runs               1
+Run Options                Normal
+State Variables            Zero
+Operating Point            On
+Operating Point Only       Off
+Auto Scale Ranges          Off
+Accumulate Plots           Off
+Fixed Time Step            Off
+Periodic Steady State      Off
+Ignore Expression Errors   Off
+
+
+*****************************************************
+***                Temperature=27                 ***
+*****************************************************
+
+Temperature=27
+
+DC Operating Point Voltages
+===========================
+Node         Voltage  Node         Voltage  Node         Voltage 
+1             1.000   2             1.000   3             1.000  
+4             1.500   5           973.754m  6             2.474  
+7             2.474   8             0.000   X6.VMOD       1.000u 
+
+DC Operating Point Inductor Current
+===================================
+Inductor     Current 
+L3          865.814u 
+
+
+Operating Point for Devices of Type Resistor
+============================================
+Instance:             V4.RS         V5.RS         V6.RS            R3         X6.R2
+V                    0.000         0.000         0.000         0.000        -1.000u
+Power DC Terms:
+PD                   0.000         0.000         0.000         0.000         0.001f
+
+DC Pin Currents:
+Ir                   0.000         0.000         0.000         0.000        -1.000p
+
+Device Variables:
+tc1                  0.000         0.000         0.000         0.000         0.000 
+tc2                  0.000         0.000         0.000         0.000         0.000 
+
+
+
+Operating Point for Devices of Type Inductor
+============================================
+Instance:                L3
+V                    0.000 
+Power DC Terms:
+PS                   0.000 
+
+DC Pin Currents:
+Il                 865.814u
+
+Device Variables:
+ic                   0.000 
+
+
+
+Operating Point for Devices of Type Capacitor
+=============================================
+Instance:                C3         X6.C1
+V                    0.000         1.000u
+Power DC Terms:
+PS                   0.000         0.000 
+
+DC Pin Currents:
+Ic                   0.000         0.000 
+
+Device Variables:
+ic                   0.000         0.000 
+
+
+
+Operating Point for Devices of Type Sine Source
+===============================================
+Instance:                V4            V5            V6
+Using model:         UMOD1S        UMOD2S      UHETEROS
+V                    1.000         1.000         1.000 
+Power DC Terms:
+PG                   0.000         0.000         0.000 
+
+DC Pin Currents:
+ISource              0.000         0.000         0.000 
+
+
+
+Operating Point for Devices of Type Dependent Source
+====================================================
+Instance:               G3          X6.G
+V                   0.000         1.000u
+Power DC Terms:
+PG                  0.000         1.000u
+
+DC Pin Currents:
+ISource           865.814u       -1.000 
+
+
+
+Operating Point for Devices of Type Function Source
+===================================================
+Instance:            X5.E2        X6.VCO         X7.E1         X8.E1
+V                   1.500       973.754m        2.474         2.474 
+Power DC Terms:
+PG                  0.000         0.000         0.000         0.000 
+
+DC Pin Currents:
+ISource             0.000         0.000         0.000         0.000 
+
+
